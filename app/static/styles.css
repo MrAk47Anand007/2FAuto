@@ -1,0 +1,298 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #18202a;
+  --muted: #667085;
+  --line: #d8dee8;
+  --accent: #146c5f;
+  --accent-strong: #0d4f45;
+  --danger: #b42318;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, Segoe UI, Arial, sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.topbar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  min-height: 64px;
+  padding: 0 28px;
+}
+
+.brand {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.topbar nav {
+  display: flex;
+  gap: 18px;
+}
+
+.page {
+  margin: 0 auto;
+  max-width: 1180px;
+  padding: 32px 24px 56px;
+}
+
+.section-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  font-size: 34px;
+  line-height: 1.15;
+  margin-bottom: 0;
+}
+
+h2 {
+  font-size: 18px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.login-body {
+  align-items: center;
+  display: flex;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.login-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 30px;
+  margin: auto;
+  max-width: 760px;
+  padding: 34px;
+  width: 100%;
+}
+
+.form-stack {
+  display: grid;
+  gap: 14px;
+}
+
+label {
+  color: #344054;
+  display: grid;
+  font-size: 14px;
+  font-weight: 600;
+  gap: 6px;
+}
+
+input,
+select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  min-height: 42px;
+  padding: 10px 12px;
+}
+
+button {
+  background: var(--accent);
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  min-height: 42px;
+  padding: 10px 16px;
+}
+
+button:hover {
+  background: var(--accent-strong);
+}
+
+.secondary-button {
+  background: #eef4f2;
+  color: var(--accent-strong);
+}
+
+.secondary-button:hover {
+  background: #dcebe7;
+}
+
+.danger-button {
+  background: #fff1f0;
+  color: var(--danger);
+}
+
+.danger-button:hover {
+  background: #ffe0dc;
+}
+
+.error {
+  background: #fff1f0;
+  border: 1px solid #fda29b;
+  border-radius: 6px;
+  color: var(--danger);
+  padding: 10px 12px;
+}
+
+.split-layout {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 32px;
+}
+
+.panel,
+.table-section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--line);
+  padding: 12px;
+  text-align: left;
+}
+
+th {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.actions form {
+  margin: 0;
+}
+
+.otp-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+
+.otp-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.otp-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.portal-name {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.otp-code {
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: 0;
+  margin: 18px 0 12px;
+}
+
+.countdown-track {
+  background: #e7eaef;
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.countdown-bar {
+  background: var(--accent);
+  height: 100%;
+  transition: width 180ms linear;
+  width: 100%;
+}
+
+.countdown-text {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.empty-state {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  padding: 22px;
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 20px;
+  }
+
+  .section-heading,
+  .split-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .page {
+    padding: 24px 16px 44px;
+  }
+
+  .otp-code {
+    font-size: 32px;
+  }
+}
