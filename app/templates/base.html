@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title or "OTP Portal" }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/dashboard">OTP Portal</a>
+    <nav>
+      {% if user and user.role == "admin" %}
+      <a href="/admin">Admin</a>
+      {% endif %}
+      {% if user %}
+      <a href="/dashboard">Dashboard</a>
+      <a href="/logout">Logout</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

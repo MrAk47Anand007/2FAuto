@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% set title = "Admin - OTP Portal" %}
+{% block content %}
+<section class="section-heading">
+  <div>
+    <p class="eyebrow">Admin console</p>
+    <h1>Manage OTP Access</h1>
+  </div>
+</section>
+
+<section class="split-layout">
+  <form method="post" action="/admin/portals" class="panel form-stack">
+    <h2>Add portal secret</h2>
+    <label>
+      Portal route name
+      <input name="portal_name" placeholder="vendor-login" pattern="[a-z0-9-]{2,64}" required>
+    </label>
+    <label>
+      Display name
+      <input name="display_name" placeholder="Vendor Login" required>
+    </label>
+    <label>
+      TOTP secret
+      <input name="secret" placeholder="Base32 authenticator secret" required>
+    </label>
+    <label>
+      MFA period
+      <input name="period" type="number" min="10" max="120" value="30" required>
+    </label>
+    <button type="submit">Add portal</button>
+  </form>
+
+  <form method="post" action="/admin/users" class="panel form-stack">
+    <h2>Add user</h2>
+    <label>
+      Username
+      <input name="username" minlength="3" required>
+    </label>
+    <label>
+      Password
+      <input name="password" type="password" minlength="8" required>
+    </label>
+    <label>
+      Role
+      <select name="role">
+        <option value="user">Business user</option>
+        <option value="admin">Admin</option>
+      </select>
+    </label>
+    <button type="submit">Add user</button>
+  </form>
+</section>
+
+<section class="table-section">
+  <h2>Portals</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Display name</th>
+        <th>Route</th>
+        <th>Secret</th>
+        <th>Period</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for portal in portals %}
+      <tr>
+        <td>{{ portal.display_name }}</td>
+        <td><code>/otp/{{ portal.portal_name }}</code></td>
+        <td>{{ portal.masked_secret }}</td>
+        <td>{{ portal.period }}s</td>
+        <td>{{ "Active" if portal.is_active else "Disabled" }}</td>
+        <td class="actions">
+          {% if portal.is_active %}
+          <form method="post" action="/admin/portals/{{ portal.portal_name }}/disable">
+            <button type="submit" class="secondary-button">Disable</button>
+          </form>
+          {% endif %}
+          <form method="post" action="/admin/portals/{{ portal.portal_name }}/delete">
+            <button type="submit" class="danger-button">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">No portal secrets registered yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="table-section">
+  <h2>Users</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Role</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in users %}
+      <tr>
+        <td>{{ item.username }}</td>
+        <td>{{ item.role }}</td>
+        <td>{{ "Active" if item.is_active else "Disabled" }}</td>
+        <td class="actions">
+          {% if item.is_active %}
+          <form method="post" action="/admin/users/{{ item.username }}/disable">
+            <button type="submit" class="secondary-button">Disable</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

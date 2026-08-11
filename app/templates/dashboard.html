@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% set title = "Live OTP Dashboard" %}
+{% block content %}
+<section class="section-heading">
+  <div>
+    <p class="eyebrow">Business user view</p>
+    <h1>Live OTP Dashboard</h1>
+  </div>
+  <button id="refresh-button" type="button" class="secondary-button">Refresh</button>
+</section>
+
+<section id="otp-grid" class="otp-grid" aria-live="polite">
+  <div class="empty-state">Loading OTPs...</div>
+</section>
+
+<script src="/static/dashboard.js"></script>
+{% endblock %}

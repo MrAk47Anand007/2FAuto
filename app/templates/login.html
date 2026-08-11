@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login - OTP Portal</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="login-body">
+  <main class="login-panel">
+    <section>
+      <p class="eyebrow">Private network access</p>
+      <h1>OTP Portal</h1>
+      <p class="muted">Sign in to view live MFA codes or manage portal secrets.</p>
+    </section>
+    <form method="post" action="/login" class="form-stack">
+      {% if error %}
+      <div class="error">{{ error }}</div>
+      {% endif %}
+      <label>
+        Username
+        <input name="username" autocomplete="username" required>
+      </label>
+      <label>
+        Password
+        <input name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit">Sign in</button>
+    </form>
+  </main>
+</body>
+</html>

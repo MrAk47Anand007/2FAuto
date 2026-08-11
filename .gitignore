@@ -36,10 +36,16 @@ site/
 .coverage
 htmlcov/
 *.xml
+output/
 
 # Logs
 *.log
 logs/
+
+# Local SQLite runtime data
+*.db
+*.db-shm
+*.db-wal
 
 # Docker
 *.env.docker
