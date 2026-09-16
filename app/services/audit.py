@@ -5,6 +5,7 @@ SAFE_METADATA_KEYS = {
     "portal_name",
     "permission",
     "client_id",
+    "user_id",
     "session_id",
     "status_code",
 }

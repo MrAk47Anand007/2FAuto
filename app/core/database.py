@@ -449,6 +449,28 @@ def clear_login_throttle(key_hash: str) -> None:
         )
 
 
+def reserve_step_up_attempt(key_hash: str, now: int) -> bool:
+    """Reserve before bcrypt so concurrent guesses cannot bypass the budget."""
+    with get_db() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute(
+            "SELECT failure_count, blocked_until FROM login_throttle WHERE key_hash = ?",
+            (key_hash,),
+        ).fetchone()
+        if row is not None and row["blocked_until"] > now:
+            return False
+        count = row["failure_count"] if row and not row["blocked_until"] else 0
+        count += 1
+        db.execute(
+            """INSERT INTO login_throttle (key_hash, failure_count, blocked_until, updated_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(key_hash) DO UPDATE SET failure_count = excluded.failure_count,
+                   blocked_until = excluded.blocked_until, updated_at = excluded.updated_at""",
+            (key_hash, count, now + 30 if count >= 5 else 0, now),
+        )
+        return True
+
+
 def record_audit_event(
     *,
     actor_user_id: int | None,
@@ -927,6 +949,8 @@ def touch_api_credential(credential_id: int, now: int) -> None:
 
 def consume_client_rate_limit(client_id: int, now: int, limit: int) -> bool:
     with get_db() as db:
+        # Serialize the check and increment across threads and worker processes.
+        db.execute("BEGIN IMMEDIATE")
         row = db.execute(
             "SELECT window_started_at, request_count FROM client_rate_limits WHERE client_id = ?",
             (client_id,),
@@ -1039,6 +1063,11 @@ def list_teams() -> list[dict]:
             ).fetchall()
             item = dict(team)
             item["members"] = [row["username"] for row in members]
+            item["grants"] = [dict(row) for row in db.execute(
+                """SELECT p.portal_name, p.display_name FROM team_portal_grants g
+                   JOIN otp_entries p ON p.id = g.portal_id
+                   WHERE g.team_id = ? AND g.is_active = 1""", (team["id"],)
+            ).fetchall()]
             result.append(item)
     return result
 
@@ -1053,6 +1082,24 @@ def add_team_member(team_id: int, user_id: int) -> None:
             """,
             (team_id, user_id, int(time.time())),
         )
+
+
+def remove_team_member(team_id: int, user_id: int) -> bool:
+    with get_db() as db:
+        cursor = db.execute(
+            "UPDATE team_memberships SET is_active = 0 WHERE team_id = ? AND user_id = ? AND is_active = 1",
+            (team_id, user_id),
+        )
+    return cursor.rowcount > 0
+
+
+def revoke_team_portal_grant(team_id: int, portal_id: int) -> bool:
+    with get_db() as db:
+        cursor = db.execute(
+            "UPDATE team_portal_grants SET is_active = 0 WHERE team_id = ? AND portal_id = ? AND is_active = 1",
+            (team_id, portal_id),
+        )
+    return cursor.rowcount > 0
 
 
 def create_team_portal_grant(

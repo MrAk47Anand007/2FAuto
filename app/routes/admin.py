@@ -29,6 +29,8 @@ from app.core.database import (
     reactivate_otp_entry,
     reactivate_user,
     revoke_portal_grant,
+    remove_team_member,
+    revoke_team_portal_grant,
     update_otp_entry_metadata,
 )
 from app.core.security import (
@@ -38,7 +40,7 @@ from app.core.security import (
     hash_password,
     require_admin,
     require_recent_step_up,
-    verify_password,
+    verify_step_up_password,
 )
 from app.services.audit import audit_event
 
@@ -144,7 +146,7 @@ def add_portal(
 @router.post("/step-up")
 def admin_step_up(request: Request, password: str = Form(...)):
     admin = require_admin(request)
-    if not verify_password(password, admin["password_hash"]):
+    if not verify_step_up_password(admin, password):
         audit_event(
             actor_user_id=admin["id"],
             actor_kind="user",
@@ -296,6 +298,32 @@ def grant_team_portal(
         result="success",
         metadata={"portal_name": portal_name, "permission": "read"},
     )
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/teams/{team_name}/members/remove", dependencies=[Depends(require_recent_step_up)])
+def remove_member_from_team(request: Request, team_name: str, username: str = Form(...)):
+    admin = require_admin(request)
+    team = get_team_by_name(team_name)
+    user = get_user_by_exact_username(username)
+    if team is None or user is None or not remove_team_member(team["id"], user["id"]):
+        raise HTTPException(status_code=404, detail="Active membership not found")
+    audit_event(actor_user_id=admin["id"], actor_kind="user",
+                action="team.member.remove", target_type="team", target_id=team_name,
+                result="success", metadata={"user_id": user["id"]})
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/teams/{team_name}/grants/{portal_name}/revoke", dependencies=[Depends(require_recent_step_up)])
+def revoke_team_access(request: Request, team_name: str, portal_name: str):
+    admin = require_admin(request)
+    team = get_team_by_name(team_name)
+    portal = get_portal_by_name(portal_name)
+    if team is None or portal is None or not revoke_team_portal_grant(team["id"], portal["id"]):
+        raise HTTPException(status_code=404, detail="Active team grant not found")
+    audit_event(actor_user_id=admin["id"], actor_kind="user",
+                action="team.grant.revoke", target_type="team", target_id=team_name,
+                result="success", metadata={"portal_name": portal_name})
     return RedirectResponse("/admin", status_code=303)
 
 

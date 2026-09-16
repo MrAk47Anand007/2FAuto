@@ -105,6 +105,13 @@
             </select>
             <button type="submit" class="secondary-button">Add member</button>
           </form>
+          {% for username in team.members %}
+          <form method="post" action="/admin/teams/{{ team.name }}/members/remove" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="username" value="{{ username }}">
+            <button type="submit" class="secondary-button">Remove {{ username }}</button>
+          </form>
+          {% endfor %}
         </td>
         <td>
           {% for portal in portals if portal.is_active %}
@@ -116,6 +123,12 @@
           </form>
           {% else %}
           <span>No active portals</span>
+          {% endfor %}
+          {% for grant in team.grants %}
+          <form method="post" action="/admin/teams/{{ team.name }}/grants/{{ grant.portal_name }}/revoke" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="secondary-button">Revoke {{ grant.display_name }}</button>
+          </form>
           {% endfor %}
         </td>
       </tr>

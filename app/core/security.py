@@ -16,6 +16,7 @@ from app.core.database import (
     is_login_throttled,
     mark_session_step_up,
     record_login_failure,
+    reserve_step_up_attempt,
     revoke_session,
     touch_session,
 )
@@ -90,11 +91,7 @@ def csrf_token_for_request(request: Request) -> str | None:
 
 def _check_same_origin(request: Request) -> None:
     origin = request.headers.get("origin")
-    # Chromium can send the literal `null` origin for an opaque local form
-    # context. Authenticated state-changing requests still require the
-    # session-derived CSRF token below, so treating it like an omitted Origin
-    # preserves CSRF protection without breaking legitimate local clients.
-    if not origin or origin == "null":
+    if origin is None:
         return
     expected = f"{request.url.scheme}://{request.url.netloc}"
     if not hmac.compare_digest(origin.rstrip("/"), expected.rstrip("/")):
@@ -139,6 +136,18 @@ def complete_step_up(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Login required")
     mark_session_step_up(session["session_id"], int(time.time()))
     session["step_up_at"] = int(time.time())
+
+
+def verify_step_up_password(user: dict, password: str) -> bool:
+    # Share the budget across both endpoints, sessions and source IPs.
+    key = _token_hash(f"step-up:{user['id']}")
+    if not reserve_step_up_attempt(key, int(time.time())):
+        raise HTTPException(status_code=429, detail="Step-up temporarily throttled",
+                            headers={"Retry-After": "30"})
+    if not verify_password(password, user["password_hash"]):
+        return False
+    clear_login_throttle(key)
+    return True
 
 
 def require_recent_step_up(request: Request) -> dict:

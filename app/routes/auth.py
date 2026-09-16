@@ -18,6 +18,7 @@ from app.core.security import (
     require_user,
     revoke_current_session,
     verify_password,
+    verify_step_up_password,
 )
 from app.services.audit import audit_event
 
@@ -130,7 +131,7 @@ def logout(request: Request):
 @router.post("/api/v1/me/step-up", dependencies=[Depends(csrf_protect)])
 def step_up(request: Request, password: str = Form(...)) -> dict:
     user = require_user(request)
-    if not verify_password(password, user["password_hash"]):
+    if not verify_step_up_password(user, password):
         audit_event(
             actor_user_id=user["id"],
             actor_kind="user",
