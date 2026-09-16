@@ -1,7 +1,7 @@
 # 2FAuto — OTP Microservice
 
-A production-ready TOTP (Time-based One-Time Password) microservice built with FastAPI.
-Designed for internal use in RPA/automation scripts that need to automate 2FA login flows.
+A TOTP (Time-based One-Time Password) microservice built with FastAPI for
+internal testing and RPA/automation scripts that need to automate 2FA login flows.
 It also includes a private-network browser portal for business users who need
 to view shared MFA codes without Postman or custom request headers, plus a small
 command-line helper for Automation Anywhere A360.
@@ -13,7 +13,7 @@ command-line helper for Automation Anywhere A360.
 - TOTP code generation and verification via `pyotp`
 - Machine authentication with API keys and HMAC request signing
 - Signed browser sessions for portal access
-- Replay-attack prevention (30-second signature window)
+- HMAC request timestamp freshness check (30-second window)
 - Constant-time comparison everywhere to prevent timing attacks
 - Structured request logging (method · path · status · latency)
 - No stack traces exposed to clients
@@ -173,6 +173,17 @@ second. It fetches OTP data on page load, when the MFA/TOTP window rolls over,
 and when the user clicks Refresh.
 
 Browser sessions are signed with `SESSION_SECRET` and expire after 12 hours.
+
+### Portal preview
+
+The screenshots below use fictional provider names and test-only OTP secrets.
+
+![Business-user dashboard with active OTP cards](https://raw.githubusercontent.com/MrAk47Anand007/2FAuto/main/docs/assets/otp-server-demo/business-dashboard.png)
+
+![Admin console for managing portals and users](https://raw.githubusercontent.com/MrAk47Anand007/2FAuto/main/docs/assets/otp-server-demo/admin-console.png)
+
+For a business-friendly walkthrough and RPA integration examples, see the
+[OTP Portal User Guide](docs/OTP-PORTAL-USER-GUIDE.md).
 
 ### A360 command-line helper
 
