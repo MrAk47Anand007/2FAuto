@@ -1,32 +1,37 @@
-# OTP Microservice
+# 2FAuto — OTP Microservice
 
 A production-ready TOTP (Time-based One-Time Password) microservice built with FastAPI.
 Designed for internal use in RPA/automation scripts that need to automate 2FA login flows.
 It also includes a private-network browser portal for business users who need
-to view shared MFA codes without Postman or custom request headers.
+to view shared MFA codes without Postman or custom request headers, plus a small
+command-line helper for Automation Anywhere A360.
 
 ---
 
 ## Features
 
 - TOTP code generation and verification via `pyotp`
-- Two-tier authentication: API key and HMAC request signing
+- Machine authentication with API keys and HMAC request signing
+- Signed browser sessions for portal access
 - Replay-attack prevention (30-second signature window)
 - Constant-time comparison everywhere to prevent timing attacks
 - Structured request logging (method · path · status · latency)
 - No stack traces exposed to clients
 - Non-root Docker image
 - Admin login for managing multiple portal TOTP secrets
+- Role-based access for administrators and business users
+- SQLite persistence for users and portal configuration
 - Business-user dashboard with multiple live OTP cards
 - Per-portal API endpoint such as `/otp/vendor-login`
 - Dashboard countdown refreshes locally and fetches new codes only when the MFA window changes
+- A360-compatible `totp_a360.py` command-line helper
 
 ---
 
 ## Project Structure
 
 ```
-otp-service/
+2FAuto/
 ├── app/
 │   ├── main.py              # FastAPI app factory + middleware
 │   ├── routes/
@@ -43,9 +48,12 @@ otp-service/
 │       └── totp.py          # TOTP generation / verification helpers
 ├── app/templates/           # Login, admin, and dashboard pages
 ├── app/static/              # CSS and dashboard refresh JavaScript
+├── tests/                   # API, authentication, portal, and dashboard tests
+├── docs/superpowers/plans/   # Multi-user portal implementation plan
 ├── .env.example
 ├── requirements.txt
-└── Dockerfile
+├── Dockerfile
+└── totp_a360.py             # Standalone A360 command-line helper
 ```
 
 ---
@@ -62,6 +70,7 @@ Edit `.env`:
 
 ```env
 API_KEY=<generate: python -c "import secrets; print(secrets.token_urlsafe(32))">
+# Optional: required only when legacy /otp or /otp/verify is used
 OTP_SECRET=<generate: python -c "import pyotp; print(pyotp.random_base32())">
 HOST=0.0.0.0
 PORT=8000
@@ -81,6 +90,23 @@ ADMIN_PASSWORD=<set a strong first admin password>
 
 ```bash
 pip install -r requirements.txt
+```
+
+For an isolated local setup:
+
+```bash
+python -m venv .venv
+# macOS/Linux
+source .venv/bin/activate
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+### 3. Run the test suite
+
+```bash
+python -m pytest -q
 ```
 
 ---
@@ -127,6 +153,12 @@ bank
 agency-portal
 ```
 
+Each portal can use an MFA period between 10 and 120 seconds. The secret is
+validated as a Base32 TOTP secret before it is saved, and the admin page only
+shows a masked version after saving. Administrators can also create or disable
+additional `admin` and `user` accounts. The final active administrator cannot
+be disabled.
+
 ### Business users
 
 Business users sign in at `/login` and land on:
@@ -139,6 +171,20 @@ The dashboard shows all active portal OTPs like an authenticator app. It updates
 the visible countdown in the browser, but it does not call the backend every
 second. It fetches OTP data on page load, when the MFA/TOTP window rolls over,
 and when the user clicks Refresh.
+
+Browser sessions are signed with `SESSION_SECRET` and expire after 12 hours.
+
+### A360 command-line helper
+
+`totp_a360.py` prints the current six-digit TOTP code so Automation Anywhere
+A360 can capture it from standard output:
+
+```bash
+python totp_a360.py YOUR_BASE32_TOTP_SECRET
+```
+
+The helper strips spaces from the supplied secret and does not require the
+FastAPI service to be running.
 
 ---
 
@@ -159,12 +205,27 @@ docker run --rm \
   otp-service
 ```
 
+The SQLite database is inside the container by default. Mount a volume or set
+`DATABASE_PATH` to a mounted path when portal users and secrets must survive
+container replacement.
+
 ---
 
 ## API Reference
 
-All protected endpoints require the `X-API-Key` header.
-All error responses are JSON: `{"error": "message"}`.
+Machine-to-machine OTP endpoints use the `X-API-Key` header. The browser portal
+uses the signed `otp_session` cookie instead. All error responses from the API
+are JSON. Request and authentication errors use FastAPI's `detail` field;
+unexpected server errors return `{"error": "Internal server error"}`.
+
+| Endpoint | Authentication | Purpose |
+|---|---|---|
+| `GET /health` | Public | Health check |
+| `GET /otp` | `X-API-Key` | Legacy env-based OTP |
+| `GET /otp/{portal_name}` | `X-API-Key` | Active portal OTP |
+| `POST /otp/verify` | `X-API-Key` | Verify the legacy OTP |
+| `GET /otp/secure` | `X-API-Key` + HMAC | Signed legacy OTP request |
+| `GET /api/ui/otps` | Browser session | Dashboard OTP data without secrets |
 
 ### `GET /health` — public
 
@@ -213,6 +274,8 @@ curl http://localhost:8000/otp/vendor-login \
   "display_name": "Vendor Login"
 }
 ```
+
+Unknown or disabled portal names return `404`.
 
 ---
 
@@ -309,6 +372,19 @@ def get_otp(api_key: str, base_url: str = "http://localhost:8000") -> str:
     return resp.json()["otp"]
 ```
 
+### Browser dashboard data
+
+After signing in at `/login`, the dashboard requests:
+
+```text
+GET /api/ui/otps
+```
+
+The response contains active portal names, display names, OTP codes, periods,
+timestamps, and remaining validity seconds. It never includes stored TOTP
+secrets. The browser updates countdowns locally every second and only fetches
+new OTP data when a visible MFA period rolls over or the user selects Refresh.
+
 ---
 
 ## Security Notes
@@ -317,7 +393,9 @@ def get_otp(api_key: str, base_url: str = "http://localhost:8000") -> str:
 - **HMAC signature** uses SHA-256; requests older than 30 seconds are rejected to prevent replay attacks.
 - **OTP_SECRET** and **API_KEY** are never logged or returned in any response.
 - Admin-added TOTP secrets are masked in the UI after save and are not returned by dashboard JSON.
+- Portal secrets are stored in the configured SQLite database; protect that file and its containing directory.
 - Generated OTP codes are shown only to authenticated browser users or API callers with `X-API-Key`.
+- Browser login cookies are signed, `HttpOnly`, `SameSite=Lax`, and expire after 12 hours.
 - **Stack traces** are never exposed; all unhandled errors return `{"error": "Internal server error"}`.
 - The Docker image runs as a **non-root user** (`appuser`).
 - Swagger UI (`/docs`) is **disabled by default**; enable only during development via `ENABLE_DOCS=true`.
