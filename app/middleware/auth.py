@@ -3,9 +3,11 @@ import hashlib
 import time
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 
 from app.core.config import settings
+from app.core.database import consume_client_rate_limit
+from app.services.clients import authenticate_client_token
 
 # Maximum age (seconds) of a signed request before it is rejected
 SIGNATURE_MAX_AGE_SECONDS = 30
@@ -13,11 +15,36 @@ SIGNATURE_MAX_AGE_SECONDS = 30
 
 def require_api_key(x_api_key: Annotated[str | None, Header()] = None) -> str:
     """Dependency: validate the X-API-Key header using constant-time comparison."""
+    if not settings.LEGACY_API_ENABLED:
+        raise HTTPException(status_code=410, detail="Legacy API authentication is disabled")
     if x_api_key is None:
         raise HTTPException(status_code=401, detail="X-API-Key header is required")
     if not hmac.compare_digest(x_api_key, settings.API_KEY):
         raise HTTPException(status_code=403, detail="Invalid API key")
     return x_api_key
+
+
+def require_client(
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+) -> dict:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Bearer client credential is required")
+    client = authenticate_client_token(authorization[7:].strip())
+    if client is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired client credential")
+    if not consume_client_rate_limit(
+        client["client_id"],
+        int(time.time()),
+        settings.CLIENT_RATE_LIMIT_PER_MINUTE,
+    ):
+        raise HTTPException(
+            status_code=429,
+            detail="Client rate limit exceeded",
+            headers={"Retry-After": "60"},
+        )
+    request.state.client = client
+    return client
 
 
 def require_hmac_signature(

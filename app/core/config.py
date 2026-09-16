@@ -1,5 +1,8 @@
 import os
 import sys
+import base64
+import binascii
+import json
 import pyotp
 from dotenv import load_dotenv
 
@@ -7,22 +10,48 @@ load_dotenv()
 
 
 class Settings:
+    APP_ENV: str
     API_KEY: str
     OTP_SECRET: str
     HOST: str
     PORT: int
     ENABLE_DOCS: bool
+    COOKIE_SECURE: bool
+    SECRET_ENCRYPTION_KEY: str
+    SECRET_ENCRYPTION_KEY_VERSION: str
+    SECRET_ENCRYPTION_KEYS: str
+    SESSION_IDLE_TIMEOUT_SECONDS: int
+    SESSION_ABSOLUTE_TIMEOUT_SECONDS: int
+    LEGACY_API_ENABLED: bool
+    CLIENT_RATE_LIMIT_PER_MINUTE: int
     DATABASE_PATH: str
     SESSION_SECRET: str
     ADMIN_USERNAME: str
     ADMIN_PASSWORD: str
 
     def __init__(self) -> None:
+        self.APP_ENV = os.getenv("APP_ENV", "development").lower()
         self.API_KEY = os.getenv("API_KEY", "")
         self.OTP_SECRET = os.getenv("OTP_SECRET", "")
         self.HOST = os.getenv("HOST", "0.0.0.0")
         self.PORT = int(os.getenv("PORT", "8000"))
         self.ENABLE_DOCS = os.getenv("ENABLE_DOCS", "false").lower() == "true"
+        self.COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+        self.SECRET_ENCRYPTION_KEY = os.getenv("SECRET_ENCRYPTION_KEY", "")
+        self.SECRET_ENCRYPTION_KEY_VERSION = os.getenv(
+            "SECRET_ENCRYPTION_KEY_VERSION", "v1"
+        )
+        self.SECRET_ENCRYPTION_KEYS = os.getenv("SECRET_ENCRYPTION_KEYS", "")
+        self.SESSION_IDLE_TIMEOUT_SECONDS = int(
+            os.getenv("SESSION_IDLE_TIMEOUT_SECONDS", "900")
+        )
+        self.SESSION_ABSOLUTE_TIMEOUT_SECONDS = int(
+            os.getenv("SESSION_ABSOLUTE_TIMEOUT_SECONDS", "28800")
+        )
+        self.LEGACY_API_ENABLED = os.getenv("LEGACY_API_ENABLED", "false").lower() == "true"
+        self.CLIENT_RATE_LIMIT_PER_MINUTE = int(
+            os.getenv("CLIENT_RATE_LIMIT_PER_MINUTE", "60")
+        )
         self.DATABASE_PATH = os.getenv("DATABASE_PATH", "otp_service.db")
         self.SESSION_SECRET = os.getenv("SESSION_SECRET", "")
         self.ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
@@ -32,12 +61,66 @@ class Settings:
 
     def _validate(self) -> None:
         missing = []
-        if not self.API_KEY:
+        if self.APP_ENV not in {"development", "test", "production"}:
+            missing.append("APP_ENV must be development, test, or production")
+        if self.LEGACY_API_ENABLED and not self.API_KEY:
             missing.append("API_KEY")
         if not self.SESSION_SECRET:
             missing.append("SESSION_SECRET")
         if not self.ADMIN_PASSWORD:
             missing.append("ADMIN_PASSWORD")
+        if not self.SECRET_ENCRYPTION_KEY:
+            missing.append("SECRET_ENCRYPTION_KEY")
+
+        if self.SECRET_ENCRYPTION_KEY:
+            try:
+                encryption_key = base64.urlsafe_b64decode(
+                    self.SECRET_ENCRYPTION_KEY.encode("ascii")
+                )
+                if len(encryption_key) != 32:
+                    missing.append("SECRET_ENCRYPTION_KEY must contain 32 bytes")
+            except (ValueError, UnicodeEncodeError, binascii.Error):
+                missing.append("SECRET_ENCRYPTION_KEY must be URL-safe base64")
+        if not self.SECRET_ENCRYPTION_KEY_VERSION:
+            missing.append("SECRET_ENCRYPTION_KEY_VERSION")
+        if self.SECRET_ENCRYPTION_KEYS:
+            try:
+                configured_keys = json.loads(self.SECRET_ENCRYPTION_KEYS)
+                if not isinstance(configured_keys, dict):
+                    raise ValueError
+                for encoded_key in configured_keys.values():
+                    decoded_key = base64.urlsafe_b64decode(str(encoded_key).encode("ascii"))
+                    if len(decoded_key) != 32:
+                        raise ValueError
+            except (ValueError, TypeError, UnicodeEncodeError, binascii.Error, json.JSONDecodeError):
+                missing.append("SECRET_ENCRYPTION_KEYS must map versions to 32-byte URL-safe base64 keys")
+        if self.SESSION_IDLE_TIMEOUT_SECONDS <= 0:
+            missing.append("SESSION_IDLE_TIMEOUT_SECONDS must be positive")
+        if self.SESSION_ABSOLUTE_TIMEOUT_SECONDS <= 0:
+            missing.append("SESSION_ABSOLUTE_TIMEOUT_SECONDS must be positive")
+        if (
+            self.SESSION_IDLE_TIMEOUT_SECONDS
+            >= self.SESSION_ABSOLUTE_TIMEOUT_SECONDS
+        ):
+            missing.append("SESSION_IDLE_TIMEOUT_SECONDS must be below absolute timeout")
+        if self.CLIENT_RATE_LIMIT_PER_MINUTE <= 0:
+            missing.append("CLIENT_RATE_LIMIT_PER_MINUTE must be positive")
+
+        if self.APP_ENV == "production":
+            sample_values = {
+                "SESSION_SECRET": {"change-this-session-secret"},
+                "ADMIN_PASSWORD": {"change-this-admin-password"},
+                "SECRET_ENCRYPTION_KEY": {"change-this-encryption-key"},
+            }
+            if self.LEGACY_API_ENABLED and self.API_KEY == "your-strong-random-api-key":
+                missing.append("API_KEY must not use the sample value")
+            for name, values in sample_values.items():
+                if getattr(self, name) in values:
+                    missing.append(f"{name} must not use the sample value")
+            if not self.COOKIE_SECURE:
+                missing.append("COOKIE_SECURE must be true in production")
+            if self.ENABLE_DOCS:
+                missing.append("ENABLE_DOCS must be false in production")
 
         if missing:
             print(

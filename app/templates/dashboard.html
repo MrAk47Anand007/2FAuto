@@ -13,5 +13,9 @@
   <div class="empty-state">Loading OTPs...</div>
 </section>
 
+<p class="muted">Codes are revealed one at a time, corrected for server clock
+offset, hidden when their window ends, and cleared when this tab is hidden.</p>
+
+<script>window.otpPortalCsrfToken = {{ csrf_token|tojson }};</script>
 <script src="/static/dashboard.js"></script>
 {% endblock %}

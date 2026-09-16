@@ -15,7 +15,10 @@
       {% endif %}
       {% if user %}
       <a href="/dashboard">Dashboard</a>
-      <a href="/logout">Logout</a>
+      <form method="post" action="/logout" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="link-button">Logout</button>
+      </form>
       {% endif %}
     </nav>
   </header>

@@ -3,9 +3,16 @@ import time
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.core.database import get_otp_entry_by_portal
 from app.core import totp as totp_core
+from app.core.database import get_db
+from app.core.secrets import SecretEncryptionError
+from app.core.config import settings
 from app.middleware.auth import require_api_key, require_hmac_signature
+from app.services.otp import (
+    PortalNotFound,
+    get_portal_otp as issue_portal_otp,
+    issue_legacy_otp,
+)
 
 router = APIRouter()
 
@@ -23,13 +30,25 @@ def health_check() -> dict:
     return {"status": "ok", "timestamp": int(time.time())}
 
 
+@router.get("/ready", tags=["Health"])
+def readiness_check() -> dict:
+    try:
+        with get_db() as db:
+            db.execute("SELECT 1").fetchone()
+        if not settings.SECRET_ENCRYPTION_KEY:
+            raise SecretEncryptionError("Secret encryption is not configured")
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Service is not ready") from exc
+    return {"status": "ready"}
+
+
 # ---------------------------------------------------------------------------
 # GET /otp  – API-key protected
 # ---------------------------------------------------------------------------
 
 @router.get("/otp", tags=["OTP"], dependencies=[Depends(require_api_key)])
 def get_otp() -> dict:
-    return totp_core.get_otp()
+    return issue_legacy_otp()
 
 
 # ---------------------------------------------------------------------------
@@ -52,19 +71,12 @@ def verify_otp(body: VerifyRequest) -> dict:
     dependencies=[Depends(require_hmac_signature)],
 )
 def get_otp_secure() -> dict:
-    return totp_core.get_otp()
+    return issue_legacy_otp()
 
 
 @router.get("/otp/{portal_name}", tags=["OTP"], dependencies=[Depends(require_api_key)])
 def get_portal_otp(portal_name: str) -> dict:
-    entry = get_otp_entry_by_portal(portal_name)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="OTP portal not found")
-    result = totp_core.get_otp_for_secret(entry["secret"], entry["period"])
-    result.update(
-        {
-            "portal_name": entry["portal_name"],
-            "display_name": entry["display_name"],
-        }
-    )
-    return result
+    try:
+        return issue_portal_otp(portal_name)
+    except PortalNotFound as exc:
+        raise HTTPException(status_code=404, detail="OTP portal not found") from exc

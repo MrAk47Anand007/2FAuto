@@ -1,4 +1,5 @@
 import time
+import uuid
 import pyotp
 
 from app.core.config import settings
@@ -26,6 +27,10 @@ def get_otp_for_secret(secret: str, period: int = 30) -> dict:
         "valid_for_seconds": valid_for_seconds,
         "period": period,
         "timestamp": now,
+        "issued_at": now,
+        "expires_at": now + valid_for_seconds,
+        "server_time": now,
+        "request_id": str(uuid.uuid4()),
     }
 
 

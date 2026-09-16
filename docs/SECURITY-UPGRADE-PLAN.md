@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Status: proposed implementation baseline; no application changes authorized by this document alone.
+Status: Code-verifiable Phases 1–7 implemented in this worktree; release remains blocked on external provider, deployment, recovery, and independent security evidence.
 
 Baseline: main after README commit `2c52712`.
 
@@ -30,6 +30,38 @@ Use synthetic MFA seeds throughout development, CI, screenshots, and browser tes
 | Verification | Five existing tests in two test modules | Security, migration, browser, deployment, and recovery evidence |
 
 The README's production-ready and replay-prevention claims must be corrected during Phase 0. A timestamp window limits replay duration but does not prevent reuse within that window. This baseline is a code review, not a penetration test or proof of deployed settings.
+
+### Phase 0 evidence log
+
+- 2026-09-16: confirmed the current SQLite schema stores `otp_entries.secret` in plaintext, the dashboard returns all active portals to any authenticated user, automation uses one global API key, and browser sessions are signed client-side cookies without server revocation or the `Secure` flag.
+- 2026-09-16: corrected README/API description claims for production readiness, replay prevention, plaintext storage, and session security.
+- 2026-09-16: changed admin bootstrap lookup to include inactive records so a disabled configured admin is not recreated on restart; covered by regression tests.
+- 2026-09-16: added explicit environment/cookie settings, production rejection of sample credentials and insecure cookie configuration, security response headers, and `no-store` headers for OTP responses.
+- 2026-09-16: added AES-GCM portal-secret storage with random nonces, portal/version-bound associated data, key-version metadata, and atomic startup migration of legacy plaintext rows; portal listings no longer select secret material.
+- 2026-09-16: added opaque hashed server sessions, idle/absolute expiry, session listing/revocation, CSRF and same-origin protection, and SQLite-backed bounded login throttling.
+- 2026-09-16: added five-minute password re-authentication step-up state for sensitive portal, grant, and client operations; independent MFA/SSO remains an external policy gate.
+- 2026-09-16: added deny-by-default user grants with expiry/revocation, user-scoped dashboard retrieval, durable redacted audit events before OTP release, and an audit search endpoint.
+- 2026-09-16: added teams, active memberships, and expiring team portal grants to the same authorization evaluator; direct user and team grants are both deny-by-default.
+- 2026-09-16: added scoped automation clients, one-time opaque bearer credentials, client portal grants, credential/client revocation, and an explicit legacy global-key compatibility flag defaulting off.
+- 2026-09-16: replaced bulk browser OTP loading with metadata-only portal listing and CSRF-protected explicit reveal; codes are held only in transient page memory and hidden at expiry.
+- 2026-09-16: added readiness checks, response transport headers, container health signaling, SQLite backup/restore helpers, an initial CI workflow, and an operator recovery runbook.
+- 2026-09-16: made the final-active-administrator check transactional, added admin-visible five-minute step-up re-authentication, added team management controls, and covered backup/restore plus final-admin behavior with tests.
+- 2026-09-16: added individual automation-credential inventory/revocation for overlap rotation and strict local `otpauth://totp` provisioning-URI parsing; no supplied URL or QR content is fetched.
+- 2026-09-16: completed a local Chromium smoke flow covering admin step-up, explicit grant/reveal, expiry hiding, empty browser storage, logout, and post-logout denial; this is not deployed-edge or device evidence.
+- 2026-09-16: added CI dependency vulnerability auditing alongside secret scanning and changed the container healthcheck to use readiness.
+- Remaining Phase 0/1 work: assign owners for legacy consumers and recovery, record the permission matrix and unresolved provider decisions, and complete versioned schema migrations and constraints.
+- Remaining Phase 2 work: connect production key custody to the selected KMS/secret manager and rehearse protected backup/restore and interrupted migration handling; resumable rotation is implemented as `scripts/rotate_secrets.py` but still needs an operational rehearsal.
+- Remaining Phase 3–8 work: independent MFA/SSO and recovery policy, team/approval workflows, request-signing/nonce policy if required, PostgreSQL and multi-instance deployment proof, encrypted backup rehearsal, browser/device/A360 acceptance, external dependency review, and independent security review.
+
+### Baseline inventory
+
+| Concern | Current evidence | Phase 0 implication |
+|---|---|---|
+| Interactive users and portal data | SQLite tables are created directly by `app/core/database.py`; there are no versioned migrations. Existing records cannot be assumed to be synthetic. | Owner must inventory users/portals in-process without exporting secrets before migration design is finalized. |
+| Automation consumers | Legacy API routes remain documented as time-boxed compatibility paths; `totp_a360.py` now accepts a portal name and scoped client token rather than a seed. | Assign an owner to each legacy consumer and migrate it to a scoped client before retiring the global key. |
+| Deployment | `Dockerfile` runs as non-root and now has a readiness healthcheck plus CI, but the repository still has no reverse-proxy/TLS profile, shared-database deployment profile, or resource limits. | Deployed-edge and multi-instance claims remain unverified; Phase 7 deployment work is still required. |
+| Recovery | SQLite backup/restore helpers and an operator runbook are present, but they do not encrypt backups or prove isolated restore, key recovery, migration interruption, RPO, or RTO. | Recovery owner, key custody, and rehearsal evidence remain unresolved decisions. |
+| Test evidence | The suite covers authentication, authorization, encrypted storage, scoped clients, portal behavior, and backup/restore helpers; a local Chromium smoke flow covers the main browser reveal lifecycle. No deployed-edge, A360 Control Room, migration rehearsal, encrypted-backup, or independent-review proof exists. | Treat current results as source/unit/local-browser evidence only, not production-readiness or compatibility evidence. |
 
 ## 3. Threat model and non-negotiable rules
 
@@ -83,7 +115,7 @@ Use PostgreSQL for the shared production target; SQLite can remain a development
 ### Proposed endpoints
 
 - `GET /api/v1/portals`: only authorized metadata; no codes or seeds.
-- `POST /api/v1/portals/{id}/otp`: authorize, rate-limit, audit, and issue one code; browser calls require CSRF protection.
+- `POST /api/v1/portals/{portal_name}/otp`: authorize, rate-limit, audit, and issue one code; browser calls require CSRF protection.
 - `GET /api/v1/me/sessions`, `DELETE /api/v1/me/sessions/{id}`: list/revoke owned sessions.
 - Administrative resources for users, teams, grants, portals, and automation clients: validate permissions separately for each action.
 - Health endpoint exposes minimal liveness. Readiness checks dependencies without disclosing secrets or infrastructure details.
@@ -167,8 +199,8 @@ Exit: revoked/expired credentials fail immediately; client A cannot read client 
 - Update countdown nodes in place; account for server/client clock offset using monotonic elapsed time after a response.
 - Hide stale codes and disable copying on expiry, offline state, or refresh failure. Revalidate after tab resume and prevent overlapping/out-of-order refreshes.
 - Add accessible keyboard/focus behavior, mobile layouts, clear loading/empty/error states, and non-color-only expiry indicators.
-- Add admin pages for portal edit/archive/reactivate, people/teams, grants, clients, sessions, and audit search.
-- Add provisioning URI/QR import with strict local parsing and validation; never upload provisioning content to third-party QR services or fetch arbitrary supplied URLs.
+- Add admin pages for portal edit/archive/reactivate, people/teams, grants, clients, sessions, and audit search. Portal/team controls are present; client, session, and audit views remain API-only.
+- Add provisioning URI/QR import with strict local parsing and validation; URI parsing is implemented locally, while QR decoding remains pending. Never upload provisioning content to third-party QR services or fetch arbitrary supplied URLs.
 - Validate a replacement secret before activation. Provider-side MFA re-enrollment remains a separate required action.
 
 Exit: browser tests cover failed requests, clock skew, sleep/resume, session expiry, no portals, large lists, keyboard use, and mobile layout; sensitive data is absent from local/session storage; screenshots use synthetic codes only.
@@ -254,18 +286,18 @@ Do not invent cloud accounts, IdP tenant details, or recovery commitments. Unres
 
 ## 10. Release checklist
 
-- [ ] Seeds encrypted; key custody separate; tamper tests and migration verified.
-- [ ] People, teams, and bots restricted by explicit grants across every endpoint.
+- [~] Seeds encrypted; key custody separate, tamper tests, and synthetic migration verified. Production KMS and rehearsal remain open.
+- [x] People, teams, and bots restricted by explicit grants across implemented endpoints.
 - [ ] Independent MFA/SSO and protected recovery demonstrated.
-- [ ] Secure sessions, CSRF, expiry, and revocation verified at deployed edge.
-- [ ] Scoped automation credentials; legacy global-key paths disabled.
-- [ ] Durable redacted auditing and outage behavior verified.
-- [ ] Dashboard cannot present expired codes as usable.
-- [ ] Real synthetic A360 and browser workflows verified.
-- [ ] Dependency/security review complete; critical/high findings resolved.
-- [ ] Backup restoration, key recovery, and interrupted migration rehearsed.
-- [ ] Operator ownership, alerts, incident runbooks, and residual risks recorded.
-- [ ] README and release notes accurately state capabilities and limitations.
+- [~] Secure sessions, CSRF, expiry, and revocation verified in source and local browser tests; deployed-edge proof remains open.
+- [~] Scoped automation credentials and individual revocation implemented; legacy global-key paths remain only as explicit compatibility mode.
+- [~] Durable redacted auditing implemented; external delivery and outage rehearsal remain open.
+- [x] Dashboard cannot present expired codes as usable in the local browser flow.
+- [~] Local synthetic browser flow verified; real A360/Control Room workflow remains open.
+- [~] CI dependency and secret scanning configured; independent security review and finding disposition remain open.
+- [ ] Backup restoration with key recovery and interrupted migration rehearsed in an isolated environment.
+- [~] Runbook and redacted operational steps exist; owners, alerts, RPO/RTO, and residual-risk signoff remain open.
+- [~] README and Markdown user guide state current capabilities; the open DOCX guide still needs synchronization after its file lock is released.
 
 ## 11. References
 

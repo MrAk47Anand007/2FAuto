@@ -10,6 +10,7 @@
 
 <section class="split-layout">
   <form method="post" action="/admin/portals" class="panel form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <h2>Add portal secret</h2>
     <label>
       Portal route name
@@ -20,8 +21,8 @@
       <input name="display_name" placeholder="Vendor Login" required>
     </label>
     <label>
-      TOTP secret
-      <input name="secret" placeholder="Base32 authenticator secret" required>
+      TOTP secret or provisioning URI
+      <input name="secret" placeholder="Base32 secret or otpauth:// URI" required>
     </label>
     <label>
       MFA period
@@ -31,6 +32,7 @@
   </form>
 
   <form method="post" action="/admin/users" class="panel form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <h2>Add user</h2>
     <label>
       Username
@@ -51,6 +53,79 @@
   </form>
 </section>
 
+<section class="split-layout">
+  <form method="post" action="/admin/step-up" class="panel form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Confirm sensitive actions</h2>
+    <p class="muted">Re-enter your administrator password to authorize portal,
+      grant, team, client, and account changes for five minutes.</p>
+    <label>
+      Administrator password
+      <input name="password" type="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit">Re-authenticate</button>
+  </form>
+</section>
+
+<section class="split-layout">
+  <form method="post" action="/admin/teams" class="panel form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Create team</h2>
+    <label>
+      Team name
+      <input name="name" minlength="2" maxlength="64" required>
+    </label>
+    <button type="submit">Create team</button>
+  </form>
+</section>
+
+<section class="table-section">
+  <h2>Teams</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Team</th>
+        <th>Members</th>
+        <th>Manage membership</th>
+        <th>Grant portal</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for team in teams %}
+      <tr>
+        <td>{{ team.name }}</td>
+        <td>{{ team.members|join(", ") if team.members else "No active members" }}</td>
+        <td>
+          <form method="post" action="/admin/teams/{{ team.name }}/members" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <select name="username" required>
+              {% for item in users if item.is_active %}
+              <option value="{{ item.username }}">{{ item.username }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="secondary-button">Add member</button>
+          </form>
+        </td>
+        <td>
+          {% for portal in portals if portal.is_active %}
+          <form method="post" action="/admin/teams/{{ team.name }}/grants/{{ portal.portal_name }}" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <span>{{ portal.display_name }}</span>
+            <input name="expires_in_days" type="number" min="0" max="3650" value="30">
+            <button type="submit" class="secondary-button">Grant</button>
+          </form>
+          {% else %}
+          <span>No active portals</span>
+          {% endfor %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">No teams configured yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
 <section class="table-section">
   <h2>Portals</h2>
   <table>
@@ -68,19 +143,58 @@
       {% for portal in portals %}
       <tr>
         <td>{{ portal.display_name }}</td>
-        <td><code>/otp/{{ portal.portal_name }}</code></td>
+        <td><code>/api/v1/portals/{{ portal.portal_name }}/otp</code></td>
         <td>{{ portal.masked_secret }}</td>
         <td>{{ portal.period }}s</td>
         <td>{{ "Active" if portal.is_active else "Disabled" }}</td>
         <td class="actions">
+          <form method="post" action="/admin/portals/{{ portal.portal_name }}/edit">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input name="display_name" value="{{ portal.display_name }}" required>
+            <input name="period" type="number" min="10" max="120" value="{{ portal.period }}" required>
+            <button type="submit" class="secondary-button">Save metadata</button>
+          </form>
+          {% if portal.is_active %}
+          <form method="post" action="/admin/portals/{{ portal.portal_name }}/grants">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label>
+              Grant read access
+              <select name="username">
+                {% for item in users if item.is_active %}
+                <option value="{{ item.username }}">{{ item.username }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>
+              Days (0 = no expiry)
+              <input name="expires_in_days" type="number" min="0" max="3650" value="30">
+            </label>
+            <button type="submit" class="secondary-button">Grant</button>
+          </form>
+          {% endif %}
+          {% for grant in portal.grants if grant.is_active %}
+          <div>{{ grant.username }} · {{ grant.permission }}</div>
+          <form method="post" action="/admin/portals/{{ portal.portal_name }}/grants/{{ grant.username }}/revoke">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="secondary-button">Revoke {{ grant.username }}</button>
+          </form>
+          {% endfor %}
           {% if portal.is_active %}
           <form method="post" action="/admin/portals/{{ portal.portal_name }}/disable">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="secondary-button">Disable</button>
           </form>
           {% endif %}
           <form method="post" action="/admin/portals/{{ portal.portal_name }}/delete">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="danger-button">Delete</button>
           </form>
+          {% if not portal.is_active %}
+          <form method="post" action="/admin/portals/{{ portal.portal_name }}/reactivate">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="secondary-button">Reactivate</button>
+          </form>
+          {% endif %}
         </td>
       </tr>
       {% else %}
@@ -110,7 +224,13 @@
         <td class="actions">
           {% if item.is_active %}
           <form method="post" action="/admin/users/{{ item.username }}/disable">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="secondary-button">Disable</button>
+          </form>
+          {% else %}
+          <form method="post" action="/admin/users/{{ item.username }}/reactivate">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="secondary-button">Reactivate</button>
           </form>
           {% endif %}
         </td>

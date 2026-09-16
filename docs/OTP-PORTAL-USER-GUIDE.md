@@ -27,15 +27,15 @@ passing codes between people.
 | Administrator | Adds and manages portal OTP entries, creates users, and disables entries that are no longer needed. |
 | Business user | Signs in to view live OTP codes on the dashboard. |
 | RPA developer | Calls a protected endpoint to receive an OTP during a bot run. |
-| Bot owner | Owns the automation account and confirms that it uses the correct portal route and API key. |
+| Bot owner | Owns the scoped automation client, its credential rotation, and its portal grants. |
 
 ## How it works
 
 1. An administrator registers a provider portal, such as a vendor workspace.
 2. The administrator gives it a clear display name and route name, for example
    `northstar-vendor`.
-3. A business user opens the dashboard, or an automation calls the matching API
-   route.
+3. A business user opens the dashboard, or an authorized automation client calls
+   the matching API route.
 4. The service creates the current six-digit OTP from the registered secret.
 5. The user or bot enters the code in the third-party provider before the
    countdown reaches zero.
@@ -61,10 +61,9 @@ refresh the page.
 
 ### Important current behavior
 
-This version is intended for private-network testing. A signed-in business user
-can currently see every active portal configured by the administrator. It does
-not yet support per-user or per-team portal permissions. Only provide accounts
-to people who are allowed to use all currently configured shared portals.
+The dashboard is deny-by-default. A signed-in business user sees only active
+portals granted directly to that user or through an active team membership and
+team grant. Expired or revoked grants stop future retrievals.
 
 ## Administrator: setting up portal access
 
@@ -79,12 +78,14 @@ Enter the following information:
 |---|---|---|
 | Portal route name | The stable API-friendly name for the provider. Use lowercase letters, numbers, and hyphens. | `northstar-vendor` |
 | Display name | The name people see in the dashboard. | `Northstar Vendor Sandbox` |
-| TOTP secret | The Base32 secret issued when the provider's authenticator MFA was enrolled. | Supplied by the provider setup process |
+| TOTP secret or provisioning URI | The Base32 secret or local `otpauth://totp/...` URI issued when the provider's authenticator MFA was enrolled. | Supplied by the provider setup process |
 | MFA period | How often the provider changes the code. | `30` seconds |
 
 Portal route names must contain 2–64 lowercase letters, numbers, or hyphens.
-The MFA period must be between 10 and 120 seconds. Once saved, the portal list
-shows only a masked version of the secret.
+The MFA period must be between 10 and 120 seconds. Provisioning URIs are parsed
+locally; the service never fetches a supplied URL or sends QR contents to a
+third party. Once saved, the portal list
+shows encrypted-at-rest status and never returns a masked or plaintext secret.
 
 ### Add a business user
 
@@ -107,12 +108,13 @@ The application prevents the last active administrator from being disabled.
 
 ## RPA developer: retrieve a portal OTP
 
-Use the portal-specific endpoint when the bot needs a code. The bot does not
-need to know the TOTP secret; it requests the current code by route name.
+Use a scoped client credential when the bot needs a code. The bot does not need
+to know the TOTP secret; it requests the current code by route name and receives
+only portals explicitly granted to its client.
 
 ```text
-GET /otp/{portal_name}
-Header: X-API-Key: your-api-key
+POST /api/v1/portals/{portal_name}/otp
+Header: Authorization: Bearer one-time-client-token
 ```
 
 Example using Python:
@@ -120,9 +122,9 @@ Example using Python:
 ```python
 import requests
 
-response = requests.get(
-    "http://localhost:8000/otp/northstar-vendor",
-    headers={"X-API-Key": "your-api-key"},
+response = requests.post(
+    "http://localhost:8000/api/v1/portals/northstar-vendor/otp",
+    headers={"Authorization": "Bearer one-time-client-token"},
     timeout=10,
 )
 response.raise_for_status()
@@ -158,11 +160,13 @@ fresh code rather than submitting one that is about to expire.
 
 ### Automation Anywhere A360 helper
 
-The repository includes `totp_a360.py`, a small helper that prints a current
-TOTP to standard output for an existing A360 command-line integration:
+The repository includes `totp_a360.py`, a small helper that requests one
+granted portal OTP and prints it to standard output for an A360 integration.
+It does not accept a seed on the command line:
 
 ```bash
-python totp_a360.py YOUR_BASE32_TOTP_SECRET
+OTP_SERVICE_URL=http://localhost:8000 OTP_CLIENT_TOKEN=one-time-client-token \
+  python totp_a360.py northstar-vendor
 ```
 
 For multi-portal use, prefer the server endpoint above. Passing a real seed as
@@ -202,9 +206,11 @@ reactivate one.
 
 ### The bot receives `401` or `403`.
 
-Check that the bot sends the `X-API-Key` header and that the configured API key
-matches the server setting. Do not put the key directly in source code; load it
-from the automation platform's secure credential store.
+Check that the bot sends a scoped `Authorization: Bearer` credential and that
+the client is granted the requested portal. A `401` usually means the credential
+is missing, expired, or revoked; a `403` means the portal grant is missing or
+expired. Do not put the token directly in source code; load it from the
+automation platform's secure credential store.
 
 ### The bot receives `404` for a portal route.
 
@@ -216,11 +222,13 @@ for example `northstar-vendor`.
 | Endpoint | Who uses it | Authentication |
 |---|---|---|
 | `GET /health` | Monitoring or setup checks | None |
-| `GET /otp` | Existing single-secret automations | `X-API-Key` |
-| `GET /otp/{portal_name}` | Portal-specific RPA flows | `X-API-Key` |
-| `POST /otp/verify` | Existing single-secret validation flows | `X-API-Key` |
-| `GET /otp/secure` | Existing HMAC-signed integrations | API key, timestamp, and signature |
-| `GET /api/ui/otps` | Browser dashboard | Signed login session |
+| `POST /api/v1/portals/{portal_name}/otp` | Scoped portal RPA flows | Bearer client credential |
+| `GET /otp` | Legacy single-secret automations during migration | `X-API-Key`, compatibility mode only |
+| `GET /otp/{portal_name}` | Legacy portal RPA flows during migration | `X-API-Key`, compatibility mode only |
+| `POST /otp/verify` | Legacy validation flows during migration | `X-API-Key`, compatibility mode only |
+| `GET /otp/secure` | Legacy HMAC integrations during migration | API key, timestamp, and signature |
+| `GET /api/ui/portals` | Browser dashboard | Server session; metadata only |
+| `POST /api/ui/portals/{portal_name}/otp` | Browser dashboard reveal | Server session + CSRF token |
 
 For local setup, Docker usage, environment variables, and the complete API
 reference, see the repository [README](../README.md).
