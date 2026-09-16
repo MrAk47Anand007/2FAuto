@@ -27,6 +27,15 @@ def test_login_accepts_same_origin(client):
     assert response.status_code == 303
 
 
+def test_login_accepts_localhost_alias_when_bound_to_loopback(client):
+    response = client.post(
+        "/login", headers={"Origin": "http://localhost:8000", "Host": "127.0.0.1:8000"},
+        data={"username": "admin", "password": "admin-pass"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+
 def test_step_up_budget_is_shared_across_endpoints_and_sessions(client, monkeypatch):
     from app.core import security
 
