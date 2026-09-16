@@ -93,13 +93,8 @@ def _check_same_origin(request: Request) -> None:
     origin = request.headers.get("origin")
     if origin is None:
         return
-    expected = f"{request.url.scheme}://{request.headers.get('host', request.url.netloc)}"
-    allowed_origins = {expected.rstrip("/")}
-    if settings.APP_ENV != "production":
-        # Local browsers may resolve the same server as either loopback name.
-        port = request.headers.get("host", request.url.netloc).rsplit(":", 1)[-1]
-        allowed_origins.update({f"http://localhost:{port}", f"http://127.0.0.1:{port}"})
-    if not any(hmac.compare_digest(origin.rstrip("/"), allowed) for allowed in allowed_origins):
+    expected = f"{request.url.scheme}://{request.url.netloc}"
+    if not hmac.compare_digest(origin.rstrip("/"), expected.rstrip("/")):
         raise HTTPException(status_code=403, detail="Origin is not allowed")
 
 

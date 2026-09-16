@@ -86,7 +86,10 @@ def create_app() -> FastAPI:
         )
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        # Chromium's form POSTs use Origin: null under no-referrer, which
+        # conflicts with strict CSRF origin validation. Keep origin information
+        # for our own forms without sending referrers to other sites.
+        response.headers.setdefault("Referrer-Policy", "same-origin")
         response.headers.setdefault(
             "Permissions-Policy",
             "camera=(), microphone=(), geolocation=(), payment=()",
