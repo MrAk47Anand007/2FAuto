@@ -65,13 +65,13 @@ function AuditPage() {
     if (!needle) return all;
     return all.filter((event) =>
       [
-        event.event,
         event.action,
-        event.actor,
-        event.username,
-        event.portal_name,
-        event.outcome,
-        event.detail,
+        event.actor_kind,
+        event.actor_user_id,
+        event.target_type,
+        event.target_id,
+        event.result,
+        event.reason,
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(needle)),
@@ -150,21 +150,23 @@ function AuditPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {events.map((event, index) => (
-                  <TableRow key={`${event.id ?? index}`}>
+                {events.map((event) => (
+                  <TableRow key={event.event_id}>
                     <TableCell className="whitespace-nowrap text-sm">
-                      {formatMoment(event.created_at ?? event.timestamp)}
+                      {formatMoment(event.created_at)}
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {event.event ?? event.action ?? "—"}
+                    <TableCell className="font-mono text-xs">{event.action}</TableCell>
+                    <TableCell className="text-sm">
+                      {event.actor_user_id === null
+                        ? event.actor_kind
+                        : `${event.actor_kind} #${event.actor_user_id}`}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {event.actor ?? event.username ?? "—"}
+                      {event.target_id
+                        ? `${event.target_type}: ${event.target_id}`
+                        : event.target_type}
                     </TableCell>
-                    <TableCell className="text-sm">
-                      {event.portal_name ?? event.detail ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-sm">{event.outcome ?? "—"}</TableCell>
+                    <TableCell className="text-sm">{event.result}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

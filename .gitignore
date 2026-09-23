@@ -43,6 +43,7 @@ site/
 htmlcov/
 *.xml
 output/
+.playwright-cli/
 
 # Logs
 *.log

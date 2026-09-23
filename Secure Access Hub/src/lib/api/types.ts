@@ -119,15 +119,14 @@ export interface ClientCredential {
 
 /* EXISTING: GET /admin/api/v1/audit?limit=100 */
 export interface AuditEvent {
-  id: number | string;
-  created_at?: string | number | null;
-  timestamp?: string | number | null;
-  event?: string;
-  action?: string;
-  actor?: string | null;
-  username?: string | null;
-  portal_name?: string | null;
-  outcome?: string | null;
-  detail?: string | null;
-  ip_address?: string | null;
+  event_id: string;
+  created_at: number;
+  action: string;
+  actor_user_id: number | null;
+  actor_kind: string;
+  target_type: string;
+  target_id: string | null;
+  result: string;
+  reason: string | null;
+  correlation_id: string;
 }

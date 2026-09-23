@@ -1,0 +1,21 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+**/__pycache__
+**/*.pyc
+.venv
+venv
+env
+node_modules
+**/node_modules
+output
+.playwright-cli
+.pytest_cache
+tests
+docs
+Secure Access Hub

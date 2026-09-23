@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+node_modules
+.output
+.vinxi
+.wrangler
+.playwright-cli
+output
+dist
+build
+*.log

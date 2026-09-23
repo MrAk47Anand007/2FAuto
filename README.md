@@ -1,472 +1,129 @@
-# 2FAuto — OTP Microservice
+# 2FAuto
 
-A TOTP (Time-based One-Time Password) microservice built with FastAPI for
-internal testing and RPA/automation scripts that need to automate 2FA login flows.
-It also includes a private-network browser portal for business users who need
-to view shared MFA codes without Postman or custom request headers, plus a small
-command-line helper for Automation Anywhere A360.
+**Shared one-time codes for people and automation, with access controls and an audit trail.**
 
----
+2FAuto combines a FastAPI TOTP service with the React **Secure Access Hub**. Administrators register portal secrets, grant access to users or teams, and issue scoped credentials to automation clients. People see only their assigned portals; codes stay hidden until explicitly revealed. The repository retains the original server-rendered pages and an Automation Anywhere A360 helper.
 
-## Features
+> The screenshots use fictional names and a separate test-only database. No OTP values, credentials, or production data are included.
 
-- TOTP code generation and verification via `pyotp`
-- Scoped bearer credentials for automation, with legacy global-key compatibility disabled by default
-- Opaque, revocable browser sessions with CSRF and same-origin protection
-- HMAC request timestamp freshness check (30-second window; reuse within that window is possible)
-- Environment-aware startup checks and security response headers
-- Constant-time comparison everywhere to prevent timing attacks
-- Structured request logging (method · path · status · latency)
-- No stack traces exposed to clients
-- Non-root Docker image
-- Admin login for managing multiple portal TOTP secrets
-- Role-based access for administrators and business users
-- SQLite persistence for users and portal configuration
-- Business-user dashboard with multiple live OTP cards
-- Per-portal scoped API endpoint such as `/api/v1/portals/vendor-login/otp`
-- Dashboard countdowns refresh locally after an explicit reveal and hide codes at expiry
-- A360-compatible `totp_a360.py` command-line helper
+## Product tour
 
----
+![Login, My Portals, My Sessions, and portal administration](docs/assets/screenshots/collage-workspace.png)
 
-## Project Structure
+![People, Teams and Access, Automation Clients, and Audit Events](docs/assets/screenshots/collage-administration.png)
 
-```
-2FAuto/
-├── app/
-│   ├── main.py              # FastAPI app factory + middleware
-│   ├── routes/
-│   │   ├── auth.py          # /login, /logout
-│   │   ├── admin.py         # /admin portal and user management
-│   │   ├── ui.py            # /dashboard and authorized dashboard JSON
-│   │   ├── clients.py       # scoped automation clients and credentials
-│   │   └── otp.py           # /health, /otp, /otp/verify, /otp/secure, /otp/{portal}
-│   ├── middleware/
-│   │   └── auth.py          # API key + HMAC signature dependencies
-│   └── core/
-│       ├── config.py        # Settings loaded from .env (validates on startup)
-│       ├── database.py      # SQLite users and portal secrets
-│       ├── security.py      # Password hashing, opaque sessions, and CSRF
-│       └── totp.py          # TOTP generation / verification helpers
-├── app/templates/           # Login, admin, and dashboard pages
-├── app/static/              # CSS and dashboard refresh JavaScript
-├── tests/                   # API, authentication, authorization, portal, and client tests
-├── docs/superpowers/plans/   # Multi-user portal implementation plan
-├── .env.example
-├── requirements.txt
-├── Dockerfile
-└── totp_a360.py             # Standalone A360 command-line helper
-```
+| Screen | Purpose |
+| --- | --- |
+| [Sign in](docs/assets/screenshots/01-login.png) | Starts an opaque, revocable browser session. |
+| [My Portals](docs/assets/screenshots/02-my-portals.png) | Shows granted portals and reveals one code at a time. |
+| [My Sessions](docs/assets/screenshots/03-my-sessions.png) | Shows active, expired, and revoked sessions and revokes active sessions. |
+| [Portals](docs/assets/screenshots/04-admin-portals.png) | Registers encrypted TOTP seeds and manages grants. |
+| [People](docs/assets/screenshots/05-people.png) | Creates and manages administrators and business users. |
+| [Teams & Access](docs/assets/screenshots/06-teams-access.png) | Grants portal access through team membership. |
+| [Automation Clients](docs/assets/screenshots/07-automation-clients.png) | Manages clients, portal grants, and one-time visible credentials. |
+| [Audit Events](docs/assets/screenshots/08-audit-events.png) | Reviews recent authentication and access activity. |
 
----
+## Run with Docker Compose
 
-## Setup
+Compose runs the API, a Node build of Secure Access Hub, and a Caddy gateway. The gateway puts the UI and API on one origin so browser cookies and same-origin CSRF checks work together. SQLite data lives in a named volume.
 
-### 1. Copy and fill in environment variables
+1. Install Docker with Compose. Copy `.env.example` to `.env` and replace the sample values for `ADMIN_PASSWORD`, `SESSION_SECRET`, and `SECRET_ENCRYPTION_KEY`. Generate random values with:
+
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   python -c "import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
+   ```
+
+   Use the first command for the session secret and a unique admin password; use the second for the encryption key. Keep `.env` private. `OTP_SECRET` and `API_KEY` are only needed for optional legacy endpoints.
+
+2. Start from the repository root:
+
+   ```bash
+   docker compose up --build -d
+   docker compose ps
+   ```
+
+3. Open [http://localhost:8080/login](http://localhost:8080/login) and sign in using the admin account in `.env`. The first admin is created on initial startup. Check `http://localhost:8080/ready` or run `docker compose logs -f` when diagnosing startup.
+
+4. Stop with `docker compose down`. The `otp_data` volume persists across restarts and image rebuilds. Back up the database volume and its matching encryption key together.
+
+The bundled gateway binds only to `127.0.0.1:8080` for local development. For a public deployment, provide HTTPS at the gateway, set `APP_ENV=production`, `COOKIE_SECURE=true`, and `ENABLE_DOCS=false`, and configure your public domain and trusted proxy. Production startup rejects insecure sample settings. Do not expose the API container directly.
+
+## Run locally without Docker
+
+Requirements: Python 3.11+, Bun 1.4+, and a filled-in `.env` copied from `.env.example`.
 
 ```bash
-cp .env.example .env
-```
-
-Edit `.env`:
-
-```env
-API_KEY=<generate: python -c "import secrets; print(secrets.token_urlsafe(32))">
-# Optional: required only when legacy /otp or /otp/verify is used
-OTP_SECRET=<generate: python -c "import pyotp; print(pyotp.random_base32())">
-APP_ENV=development
-HOST=0.0.0.0
-PORT=8000
-ENABLE_DOCS=false   # set to true during development
-COOKIE_SECURE=false # set to true behind HTTPS in production
-SECRET_ENCRYPTION_KEY=<generate a URL-safe base64 32-byte key>
-SECRET_ENCRYPTION_KEY_VERSION=v1
-SECRET_ENCRYPTION_KEYS= # optional old-version map during rotation
-LEGACY_API_ENABLED=false # temporary compatibility for old global-key clients
-DATABASE_PATH=otp_service.db
-SESSION_SECRET=<generate: python -c "import secrets; print(secrets.token_urlsafe(32))">
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=<set a strong first admin password>
-```
-
-> **Important:** `SESSION_SECRET`, `ADMIN_PASSWORD`, and
-> `SECRET_ENCRYPTION_KEY` are required. `API_KEY` is required only while the
-> temporary `LEGACY_API_ENABLED` compatibility mode is enabled.
-> `OTP_SECRET` is optional for the new multi-portal UI, but keep it configured if
-> existing automation still calls the legacy `/otp` endpoint. Each admin-added
-> portal secret must be the same base32 secret registered in the related MFA system.
-> In `APP_ENV=production`, startup rejects sample credentials, enabled API docs,
-> and `COOKIE_SECURE=false`.
-
-### 2. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-For an isolated local setup:
-
-```bash
-python -m venv .venv
-# macOS/Linux
-source .venv/bin/activate
-# Windows PowerShell
-.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-### 3. Run the test suite
+In another terminal:
 
 ```bash
-python -m pytest -q
-```
-
----
-
-## Running Locally
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-### React Secure Access Hub
-
-The React replacement UI lives in `Secure Access Hub/`. Start FastAPI first,
-then run the Vite application in a second terminal:
-
-```powershell
 cd "Secure Access Hub"
-npm install
-npm run dev -- --port 5173
+bun install --frozen-lockfile
+bun run dev --host 127.0.0.1 --port 5173
 ```
 
-Open `http://localhost:5173/login`. The Vite bridge forwards `/api/*` and
-`/admin/*` to FastAPI on port 8000, preserving server-backed cookies, CSRF, and
-the existing authorization checks. The React app is the active development UI;
-the Jinja pages remain available on port 8000 during migration.
-
-For development with auto-reload and Swagger UI, set `ENABLE_DOCS=true` in `.env` then:
-
-```bash
-uvicorn app.main:app --reload
-# Swagger UI: http://localhost:8000/docs
-```
-
----
-
-## Browser Portal
-
-### Admin
-
-Open:
-
-```text
-http://localhost:8000/login
-```
-
-Sign in with `ADMIN_USERNAME` and `ADMIN_PASSWORD`. The admin account is created
-automatically on first startup when it does not already exist in SQLite.
-
-From `/admin`, an admin can:
-
-- Add portal MFA secrets with a route name, display name, base32 secret, and MFA period.
-- Create business users or additional admins.
-- Disable or delete portal entries.
-
-Portal route names must use lowercase letters, numbers, and hyphens, for example:
-
-```text
-vendor-login
-bank
-agency-portal
-```
-
-Each portal can use an MFA period between 10 and 120 seconds. The secret is
-validated as a Base32 TOTP secret before it is saved, and the admin page only
-shows encrypted-at-rest status after saving. Administrators can also create or disable
-additional `admin` and `user` accounts, grant portal access to users or teams, and
-manage scoped automation clients. The final active administrator cannot be disabled.
-
-### Business users
-
-Business users sign in at `/login` and land on:
-
-```text
-http://localhost:8000/dashboard
-```
-
-The dashboard shows only portals explicitly granted to the signed-in user. It
-loads portal metadata without codes; a user must explicitly reveal one portal at
-a time. Revealed codes are held in transient page memory, hidden when their
-window ends, and never written to browser storage.
-
-Browser sessions use opaque server-side records with hashed token verifiers,
-15-minute idle expiry, 8-hour absolute expiry, revocation, `HttpOnly`,
-`SameSite=Lax`, and configurable `Secure` cookies. State-changing browser
-requests require a CSRF token and same-origin checks.
-Sensitive portal/grant/client operations require a password step-up that is
-fresh for five minutes. Independent MFA/SSO is still required before broad
-production release.
-
-### Portal preview
-
-The current Secure Access Hub screens below use fictional provider names and
-test-only OTP secrets. A code stays hidden until the user explicitly reveals
-it; the administrator view shows the direct, time-limited grant behind that
-access.
-
-![Secure Access Hub business-user dashboard with a revealed test OTP](docs/assets/otp-server-demo/secure-access-hub-dashboard.png)
-
-![Secure Access Hub administrator portal and access management screen](docs/assets/otp-server-demo/secure-access-hub-admin.png)
-
-For a business-friendly walkthrough and RPA integration examples, see the
-[OTP Portal User Guide](docs/OTP-PORTAL-USER-GUIDE.md).
-
-### A360 command-line helper
-
-`totp_a360.py` asks the scoped API for one granted portal code so Automation
-Anywhere A360 can capture it from standard output. The client credential must
-come from the automation platform's secure credential store; no seed is passed
-as a process argument:
-
-```bash
-OTP_SERVICE_URL=http://localhost:8000 OTP_CLIENT_TOKEN=one-time-client-token \
-  python totp_a360.py vendor-login
-```
-
-The helper preserves the OTP as a string, including leading zeroes, and
-requires the FastAPI service to be running.
-
----
-
-## Running with Docker
-
-### Build
-
-```bash
-docker build -t otp-service .
-```
-
-### Run
-
-```bash
-docker run --rm \
-  --env-file .env \
-  -p 8000:8000 \
-  otp-service
-```
-
-The SQLite database is inside the container by default. Mount a volume or set
-`DATABASE_PATH` to a mounted path when portal users and secrets must survive
-container replacement.
-
----
-
-## API Reference
-
-New machine-to-machine OTP access uses scoped bearer credentials. The old
-global-key machine endpoints are available only when `LEGACY_API_ENABLED=true`
-and are intended only for time-boxed migration compatibility.
-The browser portal uses the `otp_session` cookie. All error responses from the API
-are JSON. Request and authentication errors use FastAPI's `detail` field;
-unexpected server errors return `{"error": "Internal server error"}`.
-
-| Endpoint | Authentication | Purpose |
-|---|---|---|
-| `GET /health` | Public | Health check |
-| `GET /ready` | Public | Readiness check |
-| `GET /otp` | Legacy `X-API-Key` | Legacy env-based OTP; disabled by default |
-| `GET /otp/{portal_name}` | Legacy `X-API-Key` | Active portal OTP; disabled by default |
-| `POST /otp/verify` | Legacy `X-API-Key` | Verify the legacy OTP; disabled by default |
-| `GET /otp/secure` | Legacy `X-API-Key` + HMAC | Signed legacy OTP request; disabled by default |
-| `GET /api/v1/me/sessions` | Browser session | List the signed-in user's sessions |
-| `GET /api/ui/portals` | Browser session | Authorized portal metadata only |
-| `POST /api/ui/portals/{portal_name}/otp` | Browser session + CSRF | Explicitly reveal one authorized OTP |
-| `POST /api/v1/portals/{portal_name}/otp` | Scoped bearer credential | Client-granted portal OTP |
-
-### `GET /health` — public
-
-```bash
-curl http://localhost:8000/health
-```
-
-```json
-{"status": "ok", "timestamp": 1700000000}
-```
-
----
-
-### `GET /otp` — API-key protected
-
-Returns the current legacy env-based TOTP code and how many seconds remain in the
-30-second window. Keep `OTP_SECRET` configured if this endpoint is used.
-
-```bash
-curl http://localhost:8000/otp \
-  -H "X-API-Key: your-api-key"
-```
-
-```json
-{"otp": "482910", "valid_for_seconds": 18, "period": 30, "timestamp": 1700000012}
-```
-
----
-
-### `GET /otp/{portal_name}` — API-key protected
-
-Returns the current TOTP for an admin-registered portal.
-
-```bash
-curl http://localhost:8000/otp/vendor-login \
-  -H "X-API-Key: your-api-key"
-```
-
-```json
-{
-  "otp": "482910",
-  "valid_for_seconds": 18,
-  "period": 30,
-  "timestamp": 1700000012,
-  "portal_name": "vendor-login",
-  "display_name": "Vendor Login"
-}
-```
-
-Unknown or disabled portal names return `404`.
-
----
-
-### `POST /otp/verify` — API-key protected
-
-Verify a TOTP code. Accepts ±1 window (90 s) for clock-skew tolerance.
-
-```bash
-curl -X POST http://localhost:8000/otp/verify \
-  -H "X-API-Key: your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"otp": "482910"}'
-```
-
-```json
-{"valid": true, "timestamp": 1700000015}
-```
-
----
-
-### `GET /otp/secure` — API-key + HMAC signature
-
-Extra layer for high-security callers. Requires three headers:
-
-| Header | Value |
-|---|---|
-| `X-API-Key` | Your API key |
-| `X-Timestamp` | Current Unix timestamp (integer string) |
-| `X-Signature` | `HMAC-SHA256(key=API_KEY, msg=timestamp).hexdigest()` |
-
-The server rejects requests whose timestamp is more than **30 seconds** away from
-the server clock. This limits the freshness window but does not prevent replay
-of the same signed request within that window.
-
-```bash
-TIMESTAMP=$(date +%s)
-SIGNATURE=$(echo -n "$TIMESTAMP" | openssl dgst -sha256 -hmac "your-api-key" | awk '{print $2}')
-
-curl http://localhost:8000/otp/secure \
-  -H "X-API-Key: your-api-key" \
-  -H "X-Timestamp: $TIMESTAMP" \
-  -H "X-Signature: $SIGNATURE"
-```
-
----
-
-## Client Examples
-
-### Python — scoped client credential
+Open `http://127.0.0.1:5173/login`. The Vite development bridge forwards API requests to `http://localhost:8000`; set `VITE_BACKEND_ORIGIN` before starting Vite if the API uses another origin. The original FastAPI pages remain available on port 8000. During development, set `ENABLE_DOCS=true` to enable `/docs` on the API origin.
+
+## Roles and access
+
+- **Administrators** create portals, users, teams, grants, and automation clients. The final active administrator cannot be disabled. Sensitive changes require a recent password step-up.
+- **Users** see only portals granted directly or through an active team. Portal lists contain no codes. Each reveal is audited, kept in transient page memory, and hidden when its TOTP window expires.
+- **Automation clients** use scoped bearer credentials and per-portal grants. A newly issued token is visible once; store it in the automation platform's credential vault. The global API key routes are disabled unless `LEGACY_API_ENABLED=true`.
+
+Each portal uses a Base32 TOTP seed matching its external MFA account. Seeds are encrypted with AES-GCM before SQLite storage. Portal names are lowercase slugs such as `vendor-login`; periods may be 10–120 seconds. The UI does not show saved seeds again. See the [OTP Portal User Guide](docs/OTP-PORTAL-USER-GUIDE.md) for an end-user walkthrough.
+
+## API and automation
+
+| Endpoint | Access | Purpose |
+| --- | --- | --- |
+| `GET /health`, `GET /ready` | Public | Liveness and readiness. |
+| `POST /api/v1/auth/login` | Username and password | Starts a browser session. |
+| `GET /api/v1/me` | Browser session | Current user, role, and CSRF token. |
+| `GET /api/v1/me/sessions` | Browser session | Own session history. |
+| `GET /api/ui/portals` | Browser session | Authorized portal metadata. |
+| `POST /api/ui/portals/{portal_name}/otp` | Browser session and CSRF | Reveals one authorized code. |
+| `POST /api/v1/portals/{portal_name}/otp` | Scoped bearer credential | Returns one client-granted code. |
+| `GET /api/v1/audit` | Administrator session | Recent audit events. |
+| `/otp`, `/otp/{portal_name}`, `/otp/verify`, `/otp/secure` | Legacy API key | Compatibility routes, disabled by default. |
+
+Example scoped client request:
 
 ```python
+import os
 import requests
 
-CLIENT_TOKEN = "one-time-client-token"
 response = requests.post(
-    "http://localhost:8000/api/v1/portals/vendor-login/otp",
-    headers={"Authorization": f"Bearer {CLIENT_TOKEN}"},
+    "http://localhost:8080/api/v1/portals/vendor-login/otp",
+    headers={"Authorization": f"Bearer {os.environ['OTP_CLIENT_TOKEN']}"},
+    timeout=10,
 )
 response.raise_for_status()
 print(response.json()["otp"])
 ```
 
-The token is returned once when an administrator creates a credential. Store it
-in the automation platform's protected credential store and grant the client
-only the portals it needs.
+`totp_a360.py` is a standalone Automation Anywhere A360 helper. With `OTP_SERVICE_URL` and `OTP_CLIENT_TOKEN` supplied by its credential store, run `python totp_a360.py vendor-login`; it prints the code as a string, preserving leading zeroes. Keep automation traffic on a trusted network or behind HTTPS.
 
-### Python — legacy compatibility example
+## Security and operations
 
-The old global-key examples below apply only while `LEGACY_API_ENABLED=true`.
-Plan to migrate each consumer to a scoped client before disabling compatibility.
+- Browser sessions use opaque server-side records, `HttpOnly` and `SameSite=Lax` cookies, a 15-minute idle limit, an 8-hour absolute limit, revocation, CSRF tokens, and same-origin checks. Set `COOKIE_SECURE=true` when served over HTTPS.
+- Portal reveals and client grants are checked on the server. OTP values are absent from portal lists and browser storage. Revoking a grant or session blocks further access.
+- Keep `SECRET_ENCRYPTION_KEY` outside the database, protect backups, and retain old key versions when rotating it.
+- The API Docker image runs as a non-root user. `/docs` is development only. Legacy API key access is off by default; its HMAC timestamp window limits age but does not prevent reuse inside that window.
+- Run `python -m pytest -q` for the backend suite. The frontend build command is `bun run build` in `Secure Access Hub/`; Docker targets Nitro's `node-server` preset while the normal Lovable build remains unchanged.
 
-### Python — HMAC-signed request
-
-```python
-import hmac
-import hashlib
-import time
-import requests
-
-API_KEY = "your-api-key"
-timestamp = str(int(time.time()))
-signature = hmac.new(
-    API_KEY.encode(),
-    timestamp.encode(),
-    hashlib.sha256,
-).hexdigest()
-
-response = requests.get(
-    "http://localhost:8000/otp/secure",
-    headers={
-        "X-API-Key": API_KEY,
-        "X-Timestamp": timestamp,
-        "X-Signature": signature,
-    },
-)
-print(response.json())
-```
-
-### Python — verify in an automation script
-
-```python
-import requests
-
-def get_otp(api_key: str, base_url: str = "http://localhost:8000") -> str:
-    resp = requests.get(f"{base_url}/otp", headers={"X-API-Key": api_key})
-    resp.raise_for_status()
-    return resp.json()["otp"]
-```
-
-### Browser dashboard data
-
-After signing in at `/login`, the dashboard requests:
+## Repository map
 
 ```text
-GET /api/ui/portals
+app/                         FastAPI routes, auth, TOTP, SQLite, templates
+Secure Access Hub/           TanStack Start frontend and frontend Dockerfile
+deploy/Caddyfile             Same-origin gateway routing for Compose
+compose.yaml                 API, web, gateway, and persistent SQLite volume
+totp_a360.py                 A360 scoped-client CLI helper
+tests/                       Backend tests
+docs/                        User guide and demo screenshots
+.env.example                 Configuration template
 ```
-
-The response contains only active portal names, display names, and periods. To
-reveal a code, the browser sends a CSRF-protected `POST` to
-`/api/ui/portals/{portal_name}/otp`. The retired `/api/ui/otps` bulk endpoint
-returns `410 Gone`.
-
----
-
-## Security Notes
-
-- **Legacy API keys** are compared with `hmac.compare_digest()` and are disabled by default.
-- **Legacy HMAC signatures** use SHA-256; requests outside the 30-second freshness window are rejected. There is no nonce store yet, so reuse within that window remains possible.
-- **OTP_SECRET** and **API_KEY** are never logged or returned in any response.
-- Admin-added TOTP secrets are represented only by encrypted-at-rest status in the UI and are not returned by dashboard JSON.
-- Portal secrets are encrypted with AES-GCM before storage in the configured SQLite database. Keep the encryption key outside the database and protect both the key provider and database backups.
-- Generated OTP codes are shown only to authorized browser users or scoped bearer clients. Legacy `X-API-Key` callers are accepted only in explicit compatibility mode.
-- Browser login cookies are opaque, `HttpOnly`, `SameSite=Lax`, revocable, and expire after idle/absolute session limits. Set `COOKIE_SECURE=true` behind HTTPS.
-- **Stack traces** are never exposed; all unhandled errors return `{"error": "Internal server error"}`.
-- The Docker image runs as a **non-root user** (`appuser`).
-- Swagger UI (`/docs`) is **disabled by default**; enable only during development via `ENABLE_DOCS=true`.
-- Use HTTPS (via a reverse proxy such as nginx or Caddy) in production.
