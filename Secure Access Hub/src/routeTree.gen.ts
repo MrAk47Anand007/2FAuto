@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppApiGuideRouteImport } from './routes/app.api-guide'
 import { Route as AppPortalsRouteImport } from './routes/app.portals'
 import { Route as AppSessionsRouteImport } from './routes/app.sessions'
 import { Route as AppAdminAuditRouteImport } from './routes/app.admin.audit'
@@ -39,6 +40,11 @@ const LoginRoute = LoginRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppApiGuideRoute = AppApiGuideRouteImport.update({
+  id: '/api-guide',
+  path: '/api-guide',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPortalsRoute = AppPortalsRouteImport.update({
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/app/api-guide': typeof AppApiGuideRoute
   '/app/portals': typeof AppPortalsRoute
   '/app/sessions': typeof AppSessionsRoute
   '/app/': typeof AppIndexRoute
@@ -93,6 +100,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/app/api-guide': typeof AppApiGuideRoute
   '/app/portals': typeof AppPortalsRoute
   '/app/sessions': typeof AppSessionsRoute
   '/app': typeof AppIndexRoute
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/app/api-guide': typeof AppApiGuideRoute
   '/app/portals': typeof AppPortalsRoute
   '/app/sessions': typeof AppSessionsRoute
   '/app/': typeof AppIndexRoute
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/login'
+    | '/app/api-guide'
     | '/app/portals'
     | '/app/sessions'
     | '/app/'
@@ -134,6 +144,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/app/api-guide'
     | '/app/portals'
     | '/app/sessions'
     | '/app'
@@ -147,6 +158,7 @@ export interface FileRouteTypes {
     | '/'
     | '/app'
     | '/login'
+    | '/app/api-guide'
     | '/app/portals'
     | '/app/sessions'
     | '/app/'
@@ -191,6 +203,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/app/'
       preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/api-guide': {
+      id: '/app/api-guide'
+      path: '/api-guide'
+      fullPath: '/app/api-guide'
+      preLoaderRoute: typeof AppApiGuideRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/portals': {
@@ -246,6 +265,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppApiGuideRoute: typeof AppApiGuideRoute
   AppPortalsRoute: typeof AppPortalsRoute
   AppSessionsRoute: typeof AppSessionsRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -257,6 +277,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppApiGuideRoute: AppApiGuideRoute,
   AppPortalsRoute: AppPortalsRoute,
   AppSessionsRoute: AppSessionsRoute,
   AppIndexRoute: AppIndexRoute,

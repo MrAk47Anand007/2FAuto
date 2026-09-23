@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  BookOpen,
   Bot,
   KeyRound,
   LogOut,
@@ -26,6 +27,7 @@ interface NavItem {
 const USER_NAV: NavItem[] = [
   { to: "/app/portals", label: "My Portals", icon: KeyRound },
   { to: "/app/sessions", label: "My Sessions", icon: MonitorSmartphone },
+  { to: "/app/api-guide", label: "API Guide", icon: BookOpen },
 ];
 
 const ADMIN_NAV: NavItem[] = [

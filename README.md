@@ -78,6 +78,8 @@ Each portal uses a Base32 TOTP seed matching its external MFA account. Seeds are
 
 ## API and automation
 
+The signed-in portal also has an **API Guide** at `/app/api-guide` in its Workspace navigation. It explains credential setup, the scoped request, and the separate browser reveal endpoint.
+
 | Endpoint | Access | Purpose |
 | --- | --- | --- |
 | `GET /health`, `GET /ready` | Public | Liveness and readiness. |
