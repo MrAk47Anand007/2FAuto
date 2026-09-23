@@ -11,6 +11,12 @@ __pycache__/
 .Python
 *.pyc
 
+# React / Vite frontend
+node_modules/
+.output/
+.vinxi/
+.wrangler/
+
 # Virtual Environment
 venv/
 env/

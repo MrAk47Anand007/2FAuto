@@ -1064,7 +1064,7 @@ def list_teams() -> list[dict]:
             item = dict(team)
             item["members"] = [row["username"] for row in members]
             item["grants"] = [dict(row) for row in db.execute(
-                """SELECT p.portal_name, p.display_name FROM team_portal_grants g
+                """SELECT p.portal_name, p.display_name, g.expires_at FROM team_portal_grants g
                    JOIN otp_entries p ON p.id = g.portal_id
                    WHERE g.team_id = ? AND g.is_active = 1""", (team["id"],)
             ).fetchall()]

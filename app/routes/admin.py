@@ -462,3 +462,82 @@ def reactivate_account(request: Request, username: str):
 def audit_search(request: Request, limit: int = 100) -> dict:
     require_admin(request)
     return {"events": list_audit_events(limit)}
+
+
+@router.get("/api/v1/admin/portals")
+def api_portals(request: Request) -> dict:
+    require_admin(request)
+    teams = list_teams()
+    portals = []
+    for portal in list_otp_entries():
+        grants = [
+            {
+                "username": grant["username"],
+                "expires_at": grant["expires_at"],
+                "source": "direct",
+            }
+            for grant in list_portal_grants(portal["id"])
+            if grant["is_active"]
+        ]
+        for team in teams:
+            for grant in team["grants"]:
+                if grant["portal_name"] == portal["portal_name"]:
+                    grants.extend(
+                        {
+                            "username": username,
+                            "expires_at": grant["expires_at"],
+                            "source": "team",
+                            "team_name": team["name"],
+                        }
+                        for username in team["members"]
+                    )
+        portals.append(
+            {
+                "portal_name": portal["portal_name"],
+                "display_name": portal["display_name"],
+                "period": portal["period"],
+                "status": "active" if portal["is_active"] else "disabled",
+                "created_at": portal["created_at"],
+                "grants": grants,
+            }
+        )
+    return {"portals": portals}
+
+
+@router.get("/api/v1/admin/users")
+def api_users(request: Request) -> dict:
+    require_admin(request)
+    return {
+        "users": [
+            {
+                "id": user["id"],
+                "username": user["username"],
+                "role": user["role"],
+                "status": "active" if user["is_active"] else "disabled",
+                "created_at": user["created_at"],
+            }
+            for user in list_users()
+        ]
+    }
+
+
+@router.get("/api/v1/admin/teams")
+def api_teams(request: Request) -> dict:
+    require_admin(request)
+    return {
+        "teams": [
+            {
+                "name": team["name"],
+                "members": team["members"],
+                "grants": [
+                    {
+                        "portal_name": grant["portal_name"],
+                        "expires_at": grant["expires_at"],
+                    }
+                    for grant in team["grants"]
+                ],
+            }
+            for team in list_teams()
+            if team["is_active"]
+        ]
+    }

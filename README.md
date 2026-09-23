@@ -129,6 +129,22 @@ python -m pytest -q
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+### React Secure Access Hub
+
+The React replacement UI lives in `Secure Access Hub/`. Start FastAPI first,
+then run the Vite application in a second terminal:
+
+```powershell
+cd "Secure Access Hub"
+npm install
+npm run dev -- --port 5173
+```
+
+Open `http://localhost:5173/login`. The Vite bridge forwards `/api/*` and
+`/admin/*` to FastAPI on port 8000, preserving server-backed cookies, CSRF, and
+the existing authorization checks. The React app is the active development UI;
+the Jinja pages remain available on port 8000 during migration.
+
 For development with auto-reload and Swagger UI, set `ENABLE_DOCS=true` in `.env` then:
 
 ```bash
@@ -194,11 +210,14 @@ production release.
 
 ### Portal preview
 
-The screenshots below use fictional provider names and test-only OTP secrets.
+The current Secure Access Hub screens below use fictional provider names and
+test-only OTP secrets. A code stays hidden until the user explicitly reveals
+it; the administrator view shows the direct, time-limited grant behind that
+access.
 
-![Business-user dashboard with active OTP cards](https://raw.githubusercontent.com/MrAk47Anand007/2FAuto/main/docs/assets/otp-server-demo/business-dashboard.png)
+![Secure Access Hub business-user dashboard with a revealed test OTP](docs/assets/otp-server-demo/secure-access-hub-dashboard.png)
 
-![Admin console for managing portals and users](https://raw.githubusercontent.com/MrAk47Anand007/2FAuto/main/docs/assets/otp-server-demo/admin-console.png)
+![Secure Access Hub administrator portal and access management screen](docs/assets/otp-server-demo/secure-access-hub-admin.png)
 
 For a business-friendly walkthrough and RPA integration examples, see the
 [OTP Portal User Guide](docs/OTP-PORTAL-USER-GUIDE.md).

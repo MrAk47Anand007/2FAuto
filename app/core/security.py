@@ -57,7 +57,7 @@ def read_session_cookie(value: str | None) -> dict[str, Any] | None:
     return get_active_session(_token_hash(value), int(time.time()))
 
 
-def current_user(request: Request) -> dict | None:
+def current_user(request: Request, *, touch_activity: bool = True) -> dict | None:
     token = request.cookies.get(SESSION_COOKIE_NAME)
     session = read_session_cookie(token)
     if session is None:
@@ -65,22 +65,22 @@ def current_user(request: Request) -> dict | None:
 
     request.state.session = session
     # Background dashboard polling must not extend the idle timeout forever.
-    if request.url.path != "/api/ui/portals":
+    if touch_activity and request.url.path != "/api/ui/portals":
         touch_session(session["session_id"], int(time.time()))
     return get_user_by_id(int(session["user_id"]))
 
 
-def current_session(request: Request) -> dict | None:
+def current_session(request: Request, *, touch_activity: bool = True) -> dict | None:
     session = getattr(request.state, "session", None)
     if session is not None:
         return session
-    current_user(request)
+    current_user(request, touch_activity=touch_activity)
     return getattr(request.state, "session", None)
 
 
-def csrf_token_for_request(request: Request) -> str | None:
+def csrf_token_for_request(request: Request, *, touch_activity: bool = True) -> str | None:
     token = request.cookies.get(SESSION_COOKIE_NAME)
-    if not token or current_session(request) is None:
+    if not token or current_session(request, touch_activity=touch_activity) is None:
         return None
     return hmac.new(
         settings.SESSION_SECRET.encode("utf-8"),
@@ -102,7 +102,7 @@ async def csrf_protect(request: Request) -> None:
     if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
         return
     _check_same_origin(request)
-    if request.url.path == "/login":
+    if request.url.path in {"/login", "/api/v1/auth/login"}:
         return
     expected = csrf_token_for_request(request)
     if expected is None:
