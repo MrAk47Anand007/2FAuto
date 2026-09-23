@@ -102,6 +102,30 @@ def test_session_list_and_owned_session_revocation(client):
     assert client.get("/dashboard").status_code == 401
 
 
+def test_session_list_marks_idle_expired_sessions(client):
+    import time
+
+    from app.core.config import settings
+    from app.core.database import get_db
+    from tests.conftest import login
+
+    login(client)
+    first = next(item for item in client.get("/api/v1/me/sessions").json()["sessions"] if item["current"])
+    login(client)
+
+    with get_db() as db:
+        db.execute(
+            "UPDATE sessions SET last_active_at = ? WHERE id = ?",
+            (int(time.time()) - settings.SESSION_IDLE_TIMEOUT_SECONDS - 1, first["id"]),
+        )
+
+    response = client.get("/api/v1/me/sessions")
+    assert response.status_code == 200
+    sessions = response.json()["sessions"]
+    assert next(item for item in sessions if item["id"] == first["id"])["status"] == "expired"
+    assert next(item for item in sessions if item["current"])["status"] == "active"
+
+
 def test_login_throttle_blocks_repeated_failures(client):
     from tests.conftest import login
 

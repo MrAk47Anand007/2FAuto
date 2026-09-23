@@ -44,8 +44,10 @@ export const stepUp = (password: string) =>
 export const listSessions = () => apiRequest<{ sessions: SessionRecord[] }>("/api/v1/me/sessions");
 
 /** EXISTING */
-export const revokeSession = (sessionId: string) =>
-  apiRequest<unknown>(`/api/v1/me/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+export const revokeSession = (sessionId: number) =>
+  apiRequest<unknown>(`/api/v1/me/sessions/${encodeURIComponent(String(sessionId))}`, {
+    method: "DELETE",
+  });
 
 /* --------------------------------- portals -------------------------------- */
 

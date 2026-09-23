@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
@@ -201,15 +203,20 @@ def my_sessions(request: Request) -> dict:
     user = require_user(request)
     active = current_session(request)
     active_id = active["session_id"] if active else None
-    return {
-        "sessions": [
-            {
-                **session,
-                "current": session["id"] == active_id,
-            }
-            for session in list_user_sessions(user["id"])
-        ]
-    }
+    now = int(time.time())
+    sessions = []
+    for session in list_user_sessions(user["id"]):
+        if session["revoked_at"] is not None:
+            status = "revoked"
+        elif (
+            session["expires_at"] <= now
+            or session["last_active_at"] <= now - settings.SESSION_IDLE_TIMEOUT_SECONDS
+        ):
+            status = "expired"
+        else:
+            status = "active"
+        sessions.append({**session, "current": session["id"] == active_id, "status": status})
+    return {"sessions": sessions}
 
 
 @router.delete("/api/v1/me/sessions/{session_id}", dependencies=[Depends(csrf_protect)])

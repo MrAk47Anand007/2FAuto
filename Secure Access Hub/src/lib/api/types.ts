@@ -33,7 +33,8 @@ export interface StepUpResponse {
 
 /* EXISTING: GET /api/v1/me/sessions */
 export interface SessionRecord {
-  id: string;
+  id: number;
+  status: "active" | "expired" | "revoked";
   created_at: string | number;
   last_active_at: string | number | null;
   expires_at: string | number | null;

@@ -44,18 +44,22 @@ export const Route = createFileRoute("/app/sessions")({
 function SessionsPage() {
   const queryClient = useQueryClient();
   const { signOut } = useAuth();
-  const [pending, setPending] = useState<{ id: string; current: boolean } | null>(null);
+  const [pending, setPending] = useState<{ id: number; current: boolean } | null>(null);
 
   const query = useQuery({ queryKey: ["me", "sessions"], queryFn: listSessions });
 
   const revoke = useMutation({
-    mutationFn: (sessionId: string) => revokeSession(sessionId),
-    onSuccess: async (_data, sessionId) => {
-      const wasCurrent = pending?.current && pending.id === sessionId;
-      setPending(null);
-      if (wasCurrent) {
-        toast.success("Session revoked. Signing you out.");
+    mutationFn: async (session: { id: number; current: boolean }) => {
+      if (session.current) {
         await signOut();
+      } else {
+        await revokeSession(session.id);
+      }
+    },
+    onSuccess: async (_data, session) => {
+      setPending(null);
+      if (session.current) {
+        toast.success("Session revoked.");
         return;
       }
       toast.success("Session revoked.");
@@ -70,7 +74,7 @@ function SessionsPage() {
     <>
       <PageHeader
         title="My Sessions"
-        description="Every browser signed in with your account. Revoking a session ends it immediately."
+        description="Review browser sessions for your account. Revoke any active session to end it immediately."
       />
 
       <Panel>
@@ -91,18 +95,17 @@ function SessionsPage() {
                   <TableHead>Session</TableHead>
                   <TableHead>Started</TableHead>
                   <TableHead>Last active</TableHead>
-                  <TableHead>Expires</TableHead>
+                  <TableHead>Maximum expiry</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sessions.map((session) => {
-                  const revoked = Boolean(session.revoked_at);
                   return (
                     <TableRow key={session.id}>
                       <TableCell className="font-mono text-xs">
-                        {session.id.slice(0, 12)}…
+                        {session.id}
                         {session.current ? (
                           <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
                             This device
@@ -116,16 +119,16 @@ function SessionsPage() {
                       <TableCell className="text-sm">{formatMoment(session.expires_at)}</TableCell>
                       <TableCell>
                         <StatusBadge
-                          active={!revoked}
+                          active={session.status === "active"}
                           activeLabel="Active"
-                          inactiveLabel="Revoked"
+                          inactiveLabel={session.status === "expired" ? "Expired" : "Revoked"}
                         />
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={revoked || revoke.isPending}
+                          disabled={session.status !== "active" || revoke.isPending}
                           onClick={() => setPending({ id: session.id, current: session.current })}
                         >
                           Revoke
@@ -152,7 +155,7 @@ function SessionsPage() {
         confirmLabel="Revoke session"
         destructive
         busy={revoke.isPending}
-        onConfirm={() => pending && revoke.mutate(pending.id)}
+        onConfirm={() => pending && revoke.mutate(pending)}
       />
     </>
   );
