@@ -1,6 +1,7 @@
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -11,9 +12,11 @@ from app.core.database import create_user, get_user_by_username, init_database
 from app.core.security import hash_password
 from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
+from app.routes.auth import api_router as auth_api_router
 from app.routes.clients import router as clients_router
 from app.routes.otp import router as otp_router
 from app.routes.ui import router as ui_router
+from app.routes.frontend import register_packaged_frontend
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -53,7 +56,7 @@ async def lifespan(app: FastAPI):
     logger.info("OTP service shutting down")
 
 
-def create_app() -> FastAPI:
+def create_app(*, packaged_ui_dir: Path | None = None) -> FastAPI:
     docs_url = "/docs" if settings.ENABLE_DOCS else None
     redoc_url = "/redoc" if settings.ENABLE_DOCS else None
     openapi_url = "/openapi.json" if settings.ENABLE_DOCS else None
@@ -126,11 +129,14 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------
 
     application.mount("/static", StaticFiles(directory="app/static"), name="static")
-    application.include_router(auth_router)
+    application.include_router(auth_api_router if packaged_ui_dir is not None else auth_router)
     application.include_router(clients_router)
     application.include_router(admin_router)
     application.include_router(ui_router)
     application.include_router(otp_router)
+
+    if packaged_ui_dir is not None:
+        register_packaged_frontend(application, packaged_ui_dir)
 
     return application
 
