@@ -34,5 +34,5 @@ def register_packaged_frontend(application: FastAPI, ui_dir: Path) -> None:
     def serve_shell() -> FileResponse:
         return FileResponse(shell, media_type="text/html")
 
-    for path in ("/", "/login", "/app", "/app/{path:path}"):
+    for path in ("/", "/setup", "/login", "/app", "/app/{path:path}"):
         application.add_api_route(path, serve_shell, methods=["GET"], include_in_schema=False)

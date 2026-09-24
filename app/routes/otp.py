@@ -7,6 +7,7 @@ from app.core import totp as totp_core
 from app.core.database import get_db
 from app.core.secrets import SecretEncryptionError
 from app.core.config import settings
+from app.core.installation import is_configured
 from app.middleware.auth import require_api_key, require_hmac_signature
 from app.services.otp import (
     PortalNotFound,
@@ -33,6 +34,8 @@ def health_check() -> dict:
 @router.get("/ready", tags=["Health"])
 def readiness_check() -> dict:
     try:
+        if settings.APP_ENV == "packaged" and not is_configured():
+            raise RuntimeError("Setup is incomplete")
         with get_db() as db:
             db.execute("SELECT 1").fetchone()
         if not settings.SECRET_ENCRYPTION_KEY:

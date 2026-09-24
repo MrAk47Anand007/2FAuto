@@ -17,6 +17,7 @@ def test_packaged_build_has_static_shell_and_assets(client, tmp_path):
     assert "<html" in shell
     assert "/assets/" in shell
     assert list((tmp_path / "assets").glob("*.js"))
+    assert list((tmp_path / "assets").glob("setup-*.js"))
     assert not (tmp_path / "server").exists()
 
     from fastapi.testclient import TestClient
