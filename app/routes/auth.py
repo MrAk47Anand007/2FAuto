@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from fastapi.templating import Jinja2Templates
 
 from app.core.config import settings
+from app.core.resources import app_resource
 from app.core.database import get_user_by_username, list_user_sessions, revoke_session
 from app.core.security import (
     SESSION_COOKIE_NAME,
@@ -28,7 +29,7 @@ from app.services.audit import audit_event
 
 html_router = APIRouter()
 api_router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=app_resource("templates"))
 
 
 class LoginRequest(BaseModel):

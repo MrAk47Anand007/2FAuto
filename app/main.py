@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import create_user, get_user_by_username, init_database
 from app.core.security import hash_password
+from app.core.resources import app_resource
 from app.core.installation import is_configured, load_existing_keys
 from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
@@ -166,7 +167,7 @@ def create_app(*, packaged_ui_dir: Path | None = None) -> FastAPI:
     # Routers
     # ------------------------------------------------------------------
 
-    application.mount("/static", StaticFiles(directory="app/static"), name="static")
+    application.mount("/static", StaticFiles(directory=app_resource("static")), name="static")
     application.include_router(auth_api_router if packaged_ui_dir is not None else auth_router)
     application.include_router(clients_router)
     application.include_router(admin_router)

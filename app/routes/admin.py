@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app.core.resources import app_resource
+
 from app.core.database import (
     create_otp_entry,
     create_portal_grant,
@@ -49,7 +51,7 @@ router = APIRouter(
     tags=["Admin"],
     dependencies=[Depends(csrf_protect)],
 )
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=app_resource("templates"))
 PORTAL_NAME_RE = re.compile(r"^[a-z0-9-]{2,64}$")
 TEAM_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 _.-]{1,63}$")
 
