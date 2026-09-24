@@ -60,3 +60,14 @@ logs/
 # OS
 Thumbs.db
 desktop.ini
+
+# Desktop packaging outputs
+desktop/src-tauri/target/
+desktop/src-tauri/binaries/
+desktop/src-tauri/icons/android/
+desktop/src-tauri/icons/ios/
+desktop/src-tauri/icons/Square*.png
+desktop/src-tauri/icons/StoreLogo.png
+desktop/src-tauri/icons/32x32.png
+desktop/src-tauri/icons/64x64.png
+desktop/src-tauri/icons/128x128*.png
