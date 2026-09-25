@@ -2,9 +2,9 @@
 set -e
 DATA_DIR='/Library/Application Support/2FAuto'
 BIN='/usr/local/lib/2fauto/twofauto-runtime'
-mkdir -p "$DATA_DIR" '/Library/Logs/2FAuto'
-chown root:wheel "$DATA_DIR" '/Library/Logs/2FAuto'
-chmod 700 "$DATA_DIR" '/Library/Logs/2FAuto'
+mkdir -p "$DATA_DIR" '/Library/Logs/2FAuto' '/Library/Application Support/2FAutoKeyStore'
+chown root:wheel "$DATA_DIR" '/Library/Logs/2FAuto' '/Library/Application Support/2FAutoKeyStore'
+chmod 700 "$DATA_DIR" '/Library/Logs/2FAuto' '/Library/Application Support/2FAutoKeyStore'
 "$BIN" init --role server --data-dir "$DATA_DIR" --if-missing
 chown root:wheel "$DATA_DIR/runtime.json"
 chmod 600 "$DATA_DIR/runtime.json"

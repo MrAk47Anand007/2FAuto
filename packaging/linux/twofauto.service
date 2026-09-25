@@ -15,7 +15,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/2fauto
+ReadWritePaths=/var/lib/2fauto /etc/2fauto
 
 [Install]
 WantedBy=multi-user.target

@@ -19,6 +19,7 @@ exit 0
 
 %post
 install -d -m 0700 -o twofauto -g twofauto /var/lib/2fauto
+install -d -m 0700 -o twofauto -g twofauto /etc/2fauto
 runuser -u twofauto -- /usr/lib/2fauto/twofauto-runtime init --role server --data-dir /var/lib/2fauto --if-missing
 systemctl daemon-reload
 systemctl enable --now twofauto.service

@@ -19,11 +19,11 @@ Windows Server data and keys are stored under `%ProgramData%\2FAuto`; Desktop + 
 
 Install the **Server** `.deb` or `.rpm` for a systemd service, or the Tauri **Desktop + Web** `.deb` or `.rpm` for an interactive desktop. The service starts at boot and initially listens on `127.0.0.1:8765`. Complete setup locally or through an SSH tunnel. Server data stays in `/var/lib/2fauto`; the package does not remove it on uninstall. The `twofauto` service account owns that directory.
 
-Desktop + Web starts its own user-scoped backend and stores data in the user's local application-data directory. Its sign-in startup choice is in desktop settings.
+Desktop + Web starts its own user-scoped backend and stores data in the user's local application-data directory. Its sign-in startup choice is in desktop settings. Linux protects the Server vault key with an owner-only wrapping key in `/etc/2fauto`; a portable encrypted recovery archive is required when moving to another machine.
 
 ## macOS
 
-Install the **Server** `.pkg` for a launch daemon, or the **Desktop + Web** `.app`/`.dmg` for an interactive desktop. Server setup is available at `http://127.0.0.1:8765/setup` on the Mac. Server data stays in `/Library/Application Support/2FAuto` with owner-only access. The launch daemon currently runs under the system account; review this account choice and complete signed/notarized VM checks before release.
+Install the **Server** `.pkg` for a launch daemon, or the **Desktop + Web** `.app`/`.dmg` for an interactive desktop. Server setup is available at `http://127.0.0.1:8765/setup` on the Mac. Server data stays in `/Library/Application Support/2FAuto` with owner-only access; its wrapping key is in `/Library/Application Support/2FAutoKeyStore`. The launch daemon currently runs under the system account; review this account choice and complete signed/notarized VM checks before release.
 
 ## Make a server available to other machines
 

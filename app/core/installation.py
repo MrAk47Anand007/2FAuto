@@ -7,9 +7,13 @@ import json
 import os
 import secrets
 import sqlite3
+import stat
+import sys
 import time
 from ctypes import wintypes
 from pathlib import Path
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -59,11 +63,42 @@ def _dpapi(data: bytes, *, protect: bool) -> bytes:
         kernel32.LocalFree(target.pbData)
 
 
+def _posix_wrap_key(*, create: bool) -> bytes:
+    """Keep the local wrapping key outside the vault in owner-only storage."""
+    role = os.getenv("TWOFAUTO_ROLE", settings.PACKAGED_ROLE)
+    if role == "server" and sys.platform == "linux":
+        directory = Path("/etc/2fauto")
+    elif role == "server" and sys.platform == "darwin":
+        directory = Path("/Library/Application Support/2FAutoKeyStore")
+    else:
+        directory = Path.home() / ".config" / "2fauto"
+    if create:
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        directory.chmod(0o700)
+    path = directory / "key-wrap.bin"
+    if create and not path.exists():
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(secrets.token_bytes(32))
+                handle.flush()
+                os.fsync(handle.fileno())
+        except FileExistsError:
+            pass
+    if not path.is_file() or path.is_symlink() or path.stat().st_uid != os.getuid() or stat.S_IMODE(path.stat().st_mode) != 0o600:
+        raise InstallationError("Local key protection has unsafe permissions")
+    key = path.read_bytes()
+    if len(key) != 32:
+        raise InstallationError("Local key protection is invalid")
+    return key
+
+
 def _encode_keys(values: dict[str, str]) -> bytes:
     data = json.dumps(values, separators=(",", ":")).encode("utf-8")
     if os.name == "nt":
         return FILE_VERSION + b"W" + _dpapi(data, protect=True)
-    return FILE_VERSION + b"P" + data
+    nonce = secrets.token_bytes(12)
+    return FILE_VERSION + b"A" + nonce + AESGCM(_posix_wrap_key(create=True)).encrypt(nonce, data, FILE_VERSION)
 
 
 def _decode_keys(data: bytes) -> dict[str, str]:
@@ -72,7 +107,14 @@ def _decode_keys(data: bytes) -> dict[str, str]:
     mode, payload = data[len(FILE_VERSION):len(FILE_VERSION) + 1], data[len(FILE_VERSION) + 1:]
     if mode == b"W" and os.name == "nt":
         payload = _dpapi(payload, protect=False)
-    elif mode != b"P" or os.name == "nt":
+    elif mode == b"A" and os.name != "nt":
+        try:
+            payload = AESGCM(_posix_wrap_key(create=False)).decrypt(payload[:12], payload[12:], FILE_VERSION)
+        except ValueError as exc:
+            raise InstallationError("Local key protection is invalid") from exc
+        except Exception as exc:
+            raise InstallationError("Local key protection cannot open this vault") from exc
+    else:
         raise InstallationError("Key file protection does not match this system")
     try:
         values = json.loads(payload)

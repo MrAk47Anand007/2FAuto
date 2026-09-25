@@ -47,6 +47,10 @@ def ensure_port_available(config: RuntimeConfig) -> None:
     family = socket.AF_INET6 if ":" in config.host else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as probe:
         try:
+            if os.name != "nt":
+                # Match uvicorn's listener so a clean restart is not rejected
+                # while old TCP connections remain in TIME_WAIT.
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             probe.bind((config.host, config.port))
         except OSError as exc:
             raise RuntimeConfigError(f"Runtime port {config.port} is unavailable") from exc

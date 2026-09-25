@@ -71,7 +71,7 @@ database as a first restore step.
 | Linux | `twofauto.service` | `/var/lib/2fauto` | `/usr/lib/2fauto/twofauto-runtime` |
 | macOS | `com.twofauto.server` launch daemon | `/Library/Application Support/2FAuto` | `/usr/local/lib/2fauto/twofauto-runtime` |
 
-The vault contains `runtime.json`, `otp_service.db`, and `vault-keys.bin`. Never move only the database. Ordinary package removal does not delete this directory. A separate manual data purge should happen only after verified backups and deliberate owner approval.
+The vault contains `runtime.json`, `otp_service.db`, and `vault-keys.bin`. Never move only the database. On Linux and macOS, an owner-only wrapping key outside the Server vault protects `vault-keys.bin`; keep that key store through upgrades and uninstall. A portable encrypted recovery archive can re-protect the vault on another machine. Ordinary package removal does not delete these directories. A separate manual data purge should happen only after verified backups and deliberate owner approval.
 
 ## Health and setup
 
