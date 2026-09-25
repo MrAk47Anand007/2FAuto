@@ -59,8 +59,11 @@ jobs:
           $log = Join-Path $env:RUNNER_TEMP 'twofauto-install.log'
           $arguments = @('/i', "`"$msi`"", '/qn', 'ADDLOCAL=CoreFeature,ServerFeature', 'REMOVE=DesktopFeature', '/L*v', "`"$log`"")
           $result = Start-Process msiexec.exe -ArgumentList $arguments -PassThru -WindowStyle Hidden
-          if (-not $result.WaitForExit(300000)) { Get-Content $log -Tail 80; throw 'MSI install timed out' }
-          if ($result.ExitCode -ne 0) { Get-Content $log -Tail 80; throw "MSI install failed: $($result.ExitCode)" }
+          if (-not $result.WaitForExit(300000)) { Get-Content $log -Tail 200; throw 'MSI install timed out' }
+          if ($result.ExitCode -ne 0) {
+            Get-Content $log | Select-String -Pattern 'Return value 3|Error 1920|Error 1722|CustomAction' -Context 8,12 | Select-Object -Last 100
+            throw "MSI install failed: $($result.ExitCode)"
+          }
           if ((Get-Service 2FAuto).Status -ne 'Running') { throw 'Server service did not start' }
           $ready = $false
           for ($i = 0; $i -lt 30; $i++) {
@@ -83,6 +86,14 @@ jobs:
           if (-not (Test-Path (Join-Path $env:ProgramData '2FAuto/runtime.json'))) {
             throw 'Uninstall removed the vault configuration'
           }
+      - name: Preserve Windows MSI diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi-install-log
+          path: ${{ runner.temp }}/twofauto-install.log
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: unsigned-windows-development
