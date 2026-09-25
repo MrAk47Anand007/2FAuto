@@ -120,7 +120,7 @@ jobs:
             sleep 1
           done
           sudo dpkg -r twofauto-server
-          test -f /var/lib/2fauto/runtime.json
+          sudo test -f /var/lib/2fauto/runtime.json
       - uses: actions/upload-artifact@v4
         with:
           name: unsigned-linux-development
