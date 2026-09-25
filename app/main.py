@@ -58,7 +58,14 @@ async def lifespan(app: FastAPI):
     logger.info("OTP service starting up")
     if settings.APP_ENV == "packaged":
         load_existing_keys()
+        from app.runtime.migration import prepare_migration
+
+        prepare_migration(Path(settings.PACKAGED_DATA_DIR), Path(settings.DATABASE_PATH))
     init_database()
+    if settings.APP_ENV == "packaged":
+        from app.runtime.migration import complete_migration
+
+        complete_migration(Path(settings.PACKAGED_DATA_DIR), Path(settings.DATABASE_PATH))
     bootstrap_admin_user()
     yield
     logger.info("OTP service shutting down")
@@ -105,7 +112,7 @@ def create_app(*, packaged_ui_dir: Path | None = None) -> FastAPI:
             "Permissions-Policy",
             "camera=(), microphone=(), geolocation=(), payment=()",
         )
-        if settings.APP_ENV == "production" and settings.COOKIE_SECURE:
+        if settings.APP_ENV in {"production", "packaged"} and settings.COOKIE_SECURE:
             response.headers.setdefault(
                 "Strict-Transport-Security",
                 "max-age=31536000; includeSubDomains",

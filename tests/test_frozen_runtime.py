@@ -16,7 +16,9 @@ import pytest
 def test_frozen_runtime_serves_bundled_ui_without_developer_paths(tmp_path, onefile):
     executable_name = "2fauto-runtime.exe" if os.name == "nt" else "2fauto-runtime"
     runtime_dir = Path(__file__).resolve().parents[1] / "build" / "runtime"
-    executable = (runtime_dir / executable_name if onefile else
+    packaged_name = "twofauto-runtime.exe" if os.name == "nt" else "twofauto-runtime"
+    executable = ((runtime_dir / packaged_name if (runtime_dir / packaged_name).is_file()
+                   else runtime_dir / executable_name) if onefile else
                   runtime_dir / "2fauto-runtime" / executable_name)
     if not executable.exists():
         pytest.skip("Build with python scripts/build_runtime.py before this smoke test")
@@ -44,7 +46,9 @@ def test_frozen_runtime_serves_bundled_ui_without_developer_paths(tmp_path, onef
         while time.monotonic() < deadline:
             try:
                 with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/setup/status", timeout=1) as response:
-                    assert json.load(response)["configured"] is False
+                    status = json.load(response)
+                    assert status["configured"] is False
+                    setup_token = status["setup_token"]
                     break
             except OSError:
                 if process.poll() is not None:
@@ -60,6 +64,42 @@ def test_frozen_runtime_serves_bundled_ui_without_developer_paths(tmp_path, onef
             assert asset is not None
         with urllib.request.urlopen(f"http://127.0.0.1:{port}{asset.group(1)}", timeout=2) as response:
             assert response.status == 200
+
+        setup = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/setup/initialize",
+            data=json.dumps({"username": "owner", "password": "correct horse battery staple"}).encode(),
+            headers={"Content-Type": "application/json", "X-Setup-Token": setup_token},
+            method="POST",
+        )
+        with urllib.request.urlopen(setup, timeout=5) as response:
+            assert response.status == 201
+        archive = tmp_path / "recovery.2fauto"
+        backup = subprocess.run([str(executable), "backup", "--config", str(vault / "runtime.json"),
+                                 "--output", str(archive)], cwd=tmp_path, env=environment,
+                                input="a long recovery passphrase\n", capture_output=True,
+                                text=True, timeout=30)
+        assert backup.returncode == 0, backup.stdout + backup.stderr
+        assert archive.is_file()
     finally:
-        process.terminate()
+        if os.name == "nt" and onefile:
+            # PyInstaller's one-file launcher owns a child process that keeps
+            # the executable locked if only the launcher is terminated.
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                           capture_output=True, timeout=10)
+        else:
+            process.terminate()
         process.wait(timeout=10)
+
+    restored = tmp_path / "new-vault"
+    init_restored = subprocess.run([str(executable), "init", "--role", "desktop-web",
+                                    "--data-dir", str(restored), "--port", str(port)],
+                                   cwd=tmp_path, env=environment, capture_output=True,
+                                   text=True, timeout=20)
+    assert init_restored.returncode == 0, init_restored.stdout + init_restored.stderr
+    recovered = subprocess.run([str(executable), "restore", "--config", str(restored / "runtime.json"),
+                                "--input", str(archive)], cwd=tmp_path, env=environment,
+                               input="a long recovery passphrase\n", capture_output=True,
+                               text=True, timeout=30)
+    assert recovered.returncode == 0, recovered.stdout + recovered.stderr
+    assert (restored / "otp_service.db").is_file()
+    assert (restored / "vault-keys.bin").is_file()

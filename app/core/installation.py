@@ -91,6 +91,8 @@ def load_existing_keys() -> bool:
     values = _decode_keys(path.read_bytes())
     settings.SECRET_ENCRYPTION_KEY = values["SECRET_ENCRYPTION_KEY"]
     settings.SESSION_SECRET = values["SESSION_SECRET"]
+    settings.SECRET_ENCRYPTION_KEY_VERSION = values.get("SECRET_ENCRYPTION_KEY_VERSION", "v1")
+    settings.SECRET_ENCRYPTION_KEYS = values.get("SECRET_ENCRYPTION_KEYS", "")
     return True
 
 
