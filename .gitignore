@@ -42,6 +42,7 @@ site/
 .coverage
 htmlcov/
 *.xml
+!packaging/windows/twofauto-service.xml
 output/
 .playwright-cli/
 

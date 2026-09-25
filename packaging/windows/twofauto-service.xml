@@ -1,0 +1,13 @@
+<service>
+  <id>2FAuto</id>
+  <name>2FAuto Server</name>
+  <description>Local 2FAuto vault and web application</description>
+  <executable>%BASE%\twofauto-runtime.exe</executable>
+  <arguments>serve --config "%ProgramData%\2FAuto\runtime.json"</arguments>
+  <logpath>%ProgramData%\2FAuto\logs</logpath>
+  <log mode="roll-by-size-time">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>10</keepFiles>
+  </log>
+  <onfailure action="restart" delay="10 sec" />
+</service>
