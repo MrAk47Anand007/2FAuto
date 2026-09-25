@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="2FAuto" Language="1033" Version="0.1.0"
+           Manufacturer="2FAuto" UpgradeCode="7399A3B9-72D2-45A2-A335-1AB9B102A161">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of 2FAuto is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Property Id="ARPNOREPAIR" Value="0" />
+    <UIRef Id="WixUI_FeatureTree" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="2FAuto">
+          <Component Id="RuntimeComponent" Guid="A85B0628-BC49-4D80-AB63-E786947042E4">
+            <File Id="RuntimeExe" Source="$(var.RuntimeExe)" Name="twofauto-runtime.exe" KeyPath="yes" />
+          </Component>
+          <Component Id="DesktopComponent" Guid="5246BBD7-63F5-416A-83E8-746A512E9F47">
+            <File Id="DesktopExe" Source="$(var.DesktopExe)" Name="twofauto-desktop.exe" KeyPath="yes" />
+          </Component>
+          <Component Id="ServiceComponent" Guid="6208ED7F-6C77-4349-B4EF-A03B2E1A568B">
+            <File Id="ServiceExe" Source="$(var.ServiceExe)" Name="twofauto-service.exe" KeyPath="yes" />
+            <File Id="ServiceXml" Source="$(var.ServiceXml)" Name="twofauto-service.xml" />
+            <File Id="ServiceLicense" Source="$(var.ServiceLicense)" Name="WinSW-LICENSE.txt" />
+            <ServiceInstall Id="InstallService" Name="2FAuto" DisplayName="2FAuto Server"
+                            Description="2FAuto vault and web application" Type="ownProcess"
+                            Start="auto" ErrorControl="normal" Account="NT AUTHORITY\LocalService" />
+            <ServiceControl Id="ControlService" Name="2FAuto" Start="install"
+                            Stop="both" Remove="uninstall" Wait="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+      <Directory Id="CommonProgramsFolder">
+        <Directory Id="ProgramMenu2FAuto" Name="2FAuto">
+          <Component Id="DesktopShortcutComponent" Guid="E46E278C-83BD-4C0A-B2B0-95365BB12D50">
+            <Shortcut Id="DesktopShortcut" Name="2FAuto" Target="[INSTALLDIR]twofauto-desktop.exe"
+                      WorkingDirectory="INSTALLDIR" />
+            <RemoveFolder Id="RemoveProgramMenu" On="uninstall" />
+            <RegistryValue Root="HKLM" Key="Software\2FAuto" Name="DesktopShortcut"
+                           Type="integer" Value="1" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="CoreFeature" Title="2FAuto runtime" Level="1" Display="hidden" Absent="disallow">
+      <ComponentRef Id="RuntimeComponent" />
+    </Feature>
+    <Feature Id="DesktopFeature" Title="Desktop + Web" Description="Desktop window and private local vault"
+             Level="1" Absent="allow">
+      <ComponentRef Id="DesktopComponent" />
+      <ComponentRef Id="DesktopShortcutComponent" />
+    </Feature>
+    <Feature Id="ServerFeature" Title="Server" Description="Automatic Windows service with browser access"
+             Level="2" Absent="allow">
+      <ComponentRef Id="ServiceComponent" />
+    </Feature>
+
+    <CustomAction Id="InitServerVault" FileKey="RuntimeExe"
+                  ExeCommand="init --role server --data-dir &quot;[CommonAppDataFolder]2FAuto&quot; --if-missing"
+                  Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="OneRoleOnly" Error="Select either Server or Desktop + Web, then remove the other role from the feature list." />
+    <InstallExecuteSequence>
+      <Custom Action="OneRoleOnly" Before="InstallFiles">NOT REMOVE~="ALL" AND ((&amp;ServerFeature=3 AND &amp;DesktopFeature=3) OR (&amp;ServerFeature&lt;&gt;3 AND &amp;DesktopFeature&lt;&gt;3))</Custom>
+      <Custom Action="InitServerVault" After="InstallFiles">NOT REMOVE~="ALL" AND &amp;ServerFeature=3</Custom>
+    </InstallExecuteSequence>
+  </Product>
+</Wix>
