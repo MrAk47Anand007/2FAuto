@@ -154,3 +154,9 @@ File names for new modules are assigned here so each task has a clear owner. Exi
 4. **Cross-platform release:** Task 8 passes on clean macOS and Linux images; installers are signed where the OS supports signing and documented where Linux distribution formats differ.
 
 Backend unit tests, frontend build, and CI packaging are necessary evidence. They do not substitute for the actual installer, reboot, browser, desktop, and restore checks listed above.
+
+## Implementation status (2026-09-26)
+
+The source implementation for Tasks 1-8 is in `codex/desktop-server-distribution`: packaged single-origin UI, setup, role-aware frozen runtime, Tauri shell, HTTPS configuration, a role-selecting Windows MSI, encrypted recovery, and macOS/Linux package definitions. The Windows MSI is a development artifact. Both frozen executable layouts passed setup, live SQLite backup, and fresh-vault restore smoke tests; 54 other backend tests passed locally. The Windows role MSI built locally and its feature table was inspected.
+
+The unchecked acceptance steps above remain unchecked until the corresponding real-OS evidence exists. In particular, the CI matrix must run on Windows, Linux, and macOS; the Windows role MSI needs clean-VM install/repair/upgrade/uninstall, reboot and desktop interaction checks; Linux and macOS packages need equivalent service and UI checks; and release artifacts require owned signing credentials (plus Apple notarization). No local source test or package build closes these gates.

@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+DATA_DIR='/Library/Application Support/2FAuto'
+BIN='/usr/local/lib/2fauto/twofauto-runtime'
+mkdir -p "$DATA_DIR" '/Library/Logs/2FAuto'
+chown root:wheel "$DATA_DIR" '/Library/Logs/2FAuto'
+chmod 700 "$DATA_DIR" '/Library/Logs/2FAuto'
+"$BIN" init --role server --data-dir "$DATA_DIR" --if-missing
+chown root:wheel "$DATA_DIR/runtime.json"
+chmod 600 "$DATA_DIR/runtime.json"
+chown root:wheel /Library/LaunchDaemons/com.twofauto.server.plist
+chmod 644 /Library/LaunchDaemons/com.twofauto.server.plist
+launchctl bootout system/com.twofauto.server >/dev/null 2>&1 || true
+launchctl bootstrap system /Library/LaunchDaemons/com.twofauto.server.plist
+launchctl enable system/com.twofauto.server

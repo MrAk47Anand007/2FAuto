@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+if [ "$1" = remove ] || [ "$1" = purge ]; then
+    systemctl disable twofauto.service || true
+fi
+systemctl daemon-reload || true
+# Keep /var/lib/2fauto and the service account for a future reinstall.
