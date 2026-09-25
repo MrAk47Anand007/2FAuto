@@ -69,8 +69,12 @@ jobs:
             } catch { Start-Sleep -Seconds 1 }
           }
           if (-not $ready) { throw 'Installed service did not answer /health' }
+          python scripts/smoke_installed_server.py
           if (-not (Test-Path (Join-Path $env:ProgramData '2FAuto/runtime.json'))) {
             throw 'Server role did not create its data configuration'
+          }
+          if (-not (Test-Path (Join-Path $env:ProgramData '2FAuto/vault-keys.bin'))) {
+            throw 'Server setup did not protect its vault keys'
           }
           $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', "`"$msi`"", '/qn') -Wait -PassThru -WindowStyle Hidden
           if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed: $($uninstall.ExitCode)" }
@@ -119,6 +123,8 @@ jobs:
             if [ "$attempt" -eq 30 ]; then sudo journalctl -u twofauto.service -n 80 --no-pager; exit 1; fi
             sleep 1
           done
+          python scripts/smoke_installed_server.py
+          sudo test -f /etc/2fauto/key-wrap.bin
           sudo dpkg -r twofauto-server
           sudo test -f /var/lib/2fauto/runtime.json
       - uses: actions/upload-artifact@v4
@@ -163,6 +169,8 @@ jobs:
             if [ "$attempt" -eq 30 ]; then sudo tail -80 /Library/Logs/2FAuto/server-error.log; exit 1; fi
             sleep 1
           done
+          python scripts/smoke_installed_server.py
+          sudo test -f '/Library/Application Support/2FAutoKeyStore/key-wrap.bin'
       - uses: actions/upload-artifact@v4
         with:
           name: unsigned-macos-development
