@@ -62,6 +62,16 @@ jobs:
           if (-not $result.WaitForExit(300000)) { Get-Content $log -Tail 200; throw 'MSI install timed out' }
           if ($result.ExitCode -ne 0) {
             Get-Content $log | Select-String -Pattern 'Return value 3|Error 1920|Error 1722|CustomAction' -Context 8,12 | Select-Object -Last 100
+            $serviceLogs = Join-Path $env:ProgramData '2FAuto/logs'
+            if (Test-Path $serviceLogs) {
+              Get-ChildItem -LiteralPath $serviceLogs -File | ForEach-Object {
+                Write-Host "Service log: $($_.Name)"
+                Get-Content -LiteralPath $_.FullName -Tail 80
+              }
+            }
+            Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = (Get-Date).AddMinutes(-10) } -ErrorAction SilentlyContinue |
+              Where-Object { $_.ProviderName -match '2FAuto|WinSW|Application Error|\.NET Runtime' } |
+              Select-Object -First 20 TimeCreated, ProviderName, Message | Format-List
             throw "MSI install failed: $($result.ExitCode)"
           }
           if ((Get-Service 2FAuto).Status -ne 'Running') { throw 'Server service did not start' }
@@ -91,7 +101,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-msi-install-log
-          path: ${{ runner.temp }}/twofauto-install.log
+          path: |
+            ${{ runner.temp }}/twofauto-install.log
+            C:/ProgramData/2FAuto/logs/*
           if-no-files-found: ignore
           retention-days: 7
       - uses: actions/upload-artifact@v4
