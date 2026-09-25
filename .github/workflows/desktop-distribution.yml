@@ -58,7 +58,8 @@ jobs:
           $msi = (Resolve-Path build/windows/2FAuto-0.1.0-x64-roles.msi).Path
           $log = Join-Path $env:RUNNER_TEMP 'twofauto-install.log'
           $arguments = @('/i', "`"$msi`"", '/qn', 'ADDLOCAL=CoreFeature,ServerFeature', 'REMOVE=DesktopFeature', '/L*v', "`"$log`"")
-          $result = Start-Process msiexec.exe -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
+          $result = Start-Process msiexec.exe -ArgumentList $arguments -PassThru -WindowStyle Hidden
+          if (-not $result.WaitForExit(300000)) { Get-Content $log -Tail 80; throw 'MSI install timed out' }
           if ($result.ExitCode -ne 0) { Get-Content $log -Tail 80; throw "MSI install failed: $($result.ExitCode)" }
           if ((Get-Service 2FAuto).Status -ne 'Running') { throw 'Server service did not start' }
           $ready = $false
@@ -76,7 +77,8 @@ jobs:
           if (-not (Test-Path (Join-Path $env:ProgramData '2FAuto/vault-keys.bin'))) {
             throw 'Server setup did not protect its vault keys'
           }
-          $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', "`"$msi`"", '/qn') -Wait -PassThru -WindowStyle Hidden
+          $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', "`"$msi`"", '/qn') -PassThru -WindowStyle Hidden
+          if (-not $uninstall.WaitForExit(300000)) { throw 'MSI uninstall timed out' }
           if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed: $($uninstall.ExitCode)" }
           if (-not (Test-Path (Join-Path $env:ProgramData '2FAuto/runtime.json'))) {
             throw 'Uninstall removed the vault configuration'
