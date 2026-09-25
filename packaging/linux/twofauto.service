@@ -1,0 +1,19 @@
+[Unit]
+Description=2FAuto vault and web application
+After=network.target
+
+[Service]
+Type=simple
+User=twofauto
+Group=twofauto
+ExecStart=/usr/lib/2fauto/twofauto-runtime serve --config /var/lib/2fauto/runtime.json
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/2fauto /etc/2fauto
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>2FAuto starting</title>
+  <style>
+    body { margin: 0; font: 16px system-ui, sans-serif; color: #17212b; background: #f3f7fb; }
+    main { max-width: 440px; margin: 14vh auto; padding: 30px; background: white; border-radius: 18px; box-shadow: 0 12px 32px #102a4314; }
+    h1 { margin: 0 0 12px; font-size: 24px; }
+    p { line-height: 1.5; }
+    button { background: #145b85; border: 0; border-radius: 8px; color: white; font: inherit; padding: 10px 16px; cursor: pointer; }
+    label { display: block; margin: 14px 0; }
+    #settings { margin-top: 22px; border-top: 1px solid #ddd; padding-top: 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>2FAuto</h1>
+    <p id="status" role="status">Starting your private vault…</p>
+    <button id="retry" hidden>Try again</button>
+    <button id="openVault" hidden>Open vault</button>
+    <section id="settings">
+      <h2>Desktop settings</h2>
+      <label><input id="autostart" type="checkbox" /> Start when I sign in</label>
+      <label><input id="keepRunning" type="checkbox" /> Keep the vault running when I close the window</label>
+    </section>
+    <p>Authenticator codes depend on your computer clock. If codes are rejected, check that automatic date and time are enabled.</p>
+  </main>
+  <script src="status.js"></script>
+</body>
+</html>

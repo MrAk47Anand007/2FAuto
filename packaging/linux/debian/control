@@ -1,0 +1,10 @@
+Package: twofauto-server
+Version: 0.1.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: 2FAuto maintainers
+Depends: systemd
+Description: 2FAuto private vault and browser server
+ Installs the local vault as a systemd service. Network access remains
+ loopback-only until an administrator configures HTTPS.

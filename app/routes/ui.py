@@ -3,11 +3,12 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.core.database import list_active_otp_entries_for_user
+from app.core.resources import app_resource
 from app.core.security import csrf_protect, csrf_token_for_request, require_user
 from app.services.otp import PortalNotFound, get_portal_otp_for_user
 
 router = APIRouter(tags=["UI"])
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=app_resource("templates"))
 
 
 @router.get("/dashboard", response_class=HTMLResponse)

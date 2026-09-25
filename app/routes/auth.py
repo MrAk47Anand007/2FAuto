@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from fastapi.templating import Jinja2Templates
 
 from app.core.config import settings
+from app.core.resources import app_resource
 from app.core.database import get_user_by_username, list_user_sessions, revoke_session
 from app.core.security import (
     SESSION_COOKIE_NAME,
@@ -26,8 +27,9 @@ from app.core.security import (
 )
 from app.services.audit import audit_event
 
-router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
+html_router = APIRouter()
+api_router = APIRouter()
+templates = Jinja2Templates(directory=app_resource("templates"))
 
 
 class LoginRequest(BaseModel):
@@ -74,19 +76,19 @@ def _login_response(
     return response
 
 
-@router.get("/", response_class=HTMLResponse)
+@html_router.get("/", response_class=HTMLResponse)
 def root(request: Request):
     if current_user(request):
         return RedirectResponse("/dashboard", status_code=303)
     return RedirectResponse("/login", status_code=303)
 
 
-@router.get("/login", response_class=HTMLResponse)
+@html_router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return templates.TemplateResponse(request, "login.html", {"error": None})
 
 
-@router.post("/login", dependencies=[Depends(csrf_protect)])
+@html_router.post("/login", dependencies=[Depends(csrf_protect)])
 def login(
     request: Request,
     username: str = Form(...),
@@ -105,7 +107,7 @@ def login(
     return _login_response(user, RedirectResponse(target, status_code=303))
 
 
-@router.post("/api/v1/auth/login", dependencies=[Depends(csrf_protect)])
+@api_router.post("/api/v1/auth/login", dependencies=[Depends(csrf_protect)])
 def api_login(request: Request, body: LoginRequest) -> JSONResponse:
     user = _login_user(request, body.username, body.password)
     if user is None:
@@ -120,7 +122,7 @@ def api_login(request: Request, body: LoginRequest) -> JSONResponse:
     return _login_response(user, response, session_token)
 
 
-@router.post("/logout", dependencies=[Depends(csrf_protect)])
+@html_router.post("/logout", dependencies=[Depends(csrf_protect)])
 def logout(request: Request):
     user = current_user(request)
     revoke_current_session(request)
@@ -144,7 +146,7 @@ def logout(request: Request):
     return response
 
 
-@router.post("/api/v1/auth/logout", dependencies=[Depends(csrf_protect)])
+@api_router.post("/api/v1/auth/logout", dependencies=[Depends(csrf_protect)])
 def api_logout(request: Request) -> JSONResponse:
     user = current_user(request)
     revoke_current_session(request)
@@ -157,7 +159,7 @@ def api_logout(request: Request) -> JSONResponse:
     return response
 
 
-@router.get("/api/v1/me")
+@api_router.get("/api/v1/me")
 def me(request: Request) -> dict:
     user = current_user(request, touch_activity=False)
     session = current_session(request, touch_activity=False)
@@ -172,7 +174,7 @@ def me(request: Request) -> dict:
     }
 
 
-@router.post("/api/v1/me/step-up", dependencies=[Depends(csrf_protect)])
+@api_router.post("/api/v1/me/step-up", dependencies=[Depends(csrf_protect)])
 def step_up(request: Request, password: str = Form(...)) -> dict:
     user = require_user(request)
     if not verify_step_up_password(user, password):
@@ -198,7 +200,7 @@ def step_up(request: Request, password: str = Form(...)) -> dict:
     return {"step_up": True, "valid_for_seconds": 300}
 
 
-@router.get("/api/v1/me/sessions")
+@api_router.get("/api/v1/me/sessions")
 def my_sessions(request: Request) -> dict:
     user = require_user(request)
     active = current_session(request)
@@ -219,9 +221,16 @@ def my_sessions(request: Request) -> dict:
     return {"sessions": sessions}
 
 
-@router.delete("/api/v1/me/sessions/{session_id}", dependencies=[Depends(csrf_protect)])
+@api_router.delete("/api/v1/me/sessions/{session_id}", dependencies=[Depends(csrf_protect)])
 def revoke_my_session(request: Request, session_id: int) -> dict:
     user = require_user(request)
     if not revoke_session(session_id, user["id"]):
         raise HTTPException(status_code=404, detail="Session not found")
     return {"revoked": True, "session_id": session_id}
+
+
+# Keep the existing HTML and API behavior for the Docker and development paths.
+# Packaged mode registers only api_router so React owns / and /login.
+router = APIRouter()
+router.include_router(html_router)
+router.include_router(api_router)

@@ -1,0 +1,205 @@
+name: desktop-distribution-development
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'desktop/**'
+      - 'packaging/**'
+      - 'scripts/**'
+      - 'Secure Access Hub/**'
+      - 'requirements*.txt'
+      - '.github/workflows/desktop-distribution.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - run: python -m pip install -r requirements.txt -r requirements-build.txt
+      - run: bun install --frozen-lockfile
+        working-directory: Secure Access Hub
+      - run: python scripts/build_packaged_ui.py
+      - run: python -m pytest -q
+      - run: python scripts/build_runtime.py --onefile --name twofauto-runtime
+      - run: python scripts/prepare_desktop_sidecar.py
+      - run: python -m pytest tests/test_frozen_runtime.py -q
+      - run: bun install --frozen-lockfile
+        working-directory: desktop
+      - run: bun run tauri build --no-bundle
+        working-directory: desktop
+      - run: python packaging/windows/build_msi.py --use-built
+      - name: Inspect role MSI metadata
+        shell: pwsh
+        run: |
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $msi = (Resolve-Path build/windows/2FAuto-0.1.0-x64-roles.msi).Path
+          $database = $installer.OpenDatabase($msi, 0)
+          $view = $database.OpenView('SELECT Feature FROM Feature')
+          $view.Execute()
+          $features = @()
+          while ($record = $view.Fetch()) { $features += $record.StringData(1) }
+          $view.Close()
+          if ('ServerFeature' -notin $features -or 'DesktopFeature' -notin $features) {
+            throw 'The MSI is missing a role feature.'
+          }
+      - name: Install Server role on disposable runner
+        shell: pwsh
+        run: |
+          $msi = (Resolve-Path build/windows/2FAuto-0.1.0-x64-roles.msi).Path
+          $log = Join-Path $env:RUNNER_TEMP 'twofauto-install.log'
+          $arguments = @('/i', "`"$msi`"", '/qn', 'ADDLOCAL=CoreFeature,ServerFeature', 'REMOVE=DesktopFeature', '/L*v', "`"$log`"")
+          $result = Start-Process msiexec.exe -ArgumentList $arguments -PassThru -WindowStyle Hidden
+          if (-not $result.WaitForExit(300000)) { Get-Content $log -Tail 200; throw 'MSI install timed out' }
+          if ($result.ExitCode -ne 0) {
+            Get-Content $log | Select-String -Pattern 'Return value 3|Error 1920|Error 1722|CustomAction' -Context 8,12 | Select-Object -Last 100
+            $serviceLogs = Join-Path $env:ProgramData '2FAuto/logs'
+            if (Test-Path $serviceLogs) {
+              Get-ChildItem -LiteralPath $serviceLogs -File | ForEach-Object {
+                Write-Host "Service log: $($_.Name)"
+                Get-Content -LiteralPath $_.FullName -Tail 80
+              }
+            }
+            Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = (Get-Date).AddMinutes(-10) } -ErrorAction SilentlyContinue |
+              Where-Object { $_.ProviderName -match '2FAuto|WinSW|Application Error|\.NET Runtime' } |
+              Select-Object -First 20 TimeCreated, ProviderName, Message | Format-List
+            throw "MSI install failed: $($result.ExitCode)"
+          }
+          if ((Get-Service 2FAuto).Status -ne 'Running') { throw 'Server service did not start' }
+          $ready = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            try {
+              $response = Invoke-WebRequest 'http://127.0.0.1:8765/health' -TimeoutSec 2
+              if ($response.StatusCode -eq 200) { $ready = $true; break }
+            } catch { Start-Sleep -Seconds 1 }
+          }
+          if (-not $ready) { throw 'Installed service did not answer /health' }
+          python scripts/smoke_installed_server.py
+          if (-not (Test-Path (Join-Path $env:ProgramData '2FAuto/runtime.json'))) {
+            throw 'Server role did not create its data configuration'
+          }
+          if (-not (Test-Path (Join-Path $env:ProgramData '2FAuto/vault-keys.bin'))) {
+            throw 'Server setup did not protect its vault keys'
+          }
+          $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', "`"$msi`"", '/qn') -PassThru -WindowStyle Hidden
+          if (-not $uninstall.WaitForExit(300000)) { throw 'MSI uninstall timed out' }
+          if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed: $($uninstall.ExitCode)" }
+          if (-not (Test-Path (Join-Path $env:ProgramData '2FAuto/runtime.json'))) {
+            throw 'Uninstall removed the vault configuration'
+          }
+      - name: Preserve Windows MSI diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi-install-log
+          path: |
+            ${{ runner.temp }}/twofauto-install.log
+            C:/ProgramData/2FAuto/logs/*
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-windows-development
+          path: build/windows/2FAuto-0.1.0-x64-roles.msi
+          retention-days: 7
+
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev rpm
+      - run: python -m pip install -r requirements.txt -r requirements-build.txt
+      - run: bun install --frozen-lockfile
+        working-directory: Secure Access Hub
+      - run: python scripts/build_packaged_ui.py
+      - run: python -m pytest -q
+      - run: python scripts/build_runtime.py --onefile --name twofauto-runtime
+      - run: python scripts/prepare_desktop_sidecar.py
+      - run: python -m pytest tests/test_frozen_runtime.py -q
+      - run: bun install --frozen-lockfile
+        working-directory: desktop
+      - run: bun run tauri build --bundles deb,rpm
+        working-directory: desktop
+      - run: python packaging/linux/build_server.py --use-built
+      - run: dpkg-deb --info build/linux-server/twofauto-server_0.1.0_amd64.deb
+      - name: Install Linux Server on disposable runner
+        run: |
+          sudo dpkg -i build/linux-server/twofauto-server_0.1.0_amd64.deb
+          systemctl is-active --quiet twofauto.service
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8765/health; then break; fi
+            if [ "$attempt" -eq 30 ]; then sudo journalctl -u twofauto.service -n 80 --no-pager; exit 1; fi
+            sleep 1
+          done
+          python scripts/smoke_installed_server.py
+          sudo test -f /etc/2fauto/key-wrap.bin
+          sudo dpkg -r twofauto-server
+          sudo test -f /var/lib/2fauto/runtime.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-linux-development
+          path: |
+            build/linux-server/twofauto-server_0.1.0_amd64.deb
+            build/linux-server/rpmbuild/RPMS/**/*.rpm
+            desktop/src-tauri/target/release/bundle/deb/*.deb
+            desktop/src-tauri/target/release/bundle/rpm/*.rpm
+          retention-days: 7
+
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - run: python -m pip install -r requirements.txt -r requirements-build.txt
+      - run: bun install --frozen-lockfile
+        working-directory: Secure Access Hub
+      - run: python scripts/build_packaged_ui.py
+      - run: python -m pytest -q
+      - run: python scripts/build_runtime.py --onefile --name twofauto-runtime
+      - run: python scripts/prepare_desktop_sidecar.py
+      - run: python -m pytest tests/test_frozen_runtime.py -q
+      - run: bun install --frozen-lockfile
+        working-directory: desktop
+      - run: bun run tauri build --bundles app,dmg
+        working-directory: desktop
+      - run: python packaging/macos/build_server.py --use-built
+      - run: plutil -lint packaging/macos/com.twofauto.server.plist
+      - name: Install macOS Server on disposable runner
+        run: |
+          sudo installer -pkg build/macos-server/2FAuto-Server-0.1.0.pkg -target /
+          launchctl print system/com.twofauto.server
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8765/health; then break; fi
+            if [ "$attempt" -eq 30 ]; then sudo tail -80 /Library/Logs/2FAuto/server-error.log; exit 1; fi
+            sleep 1
+          done
+          python scripts/smoke_installed_server.py
+          sudo test -f '/Library/Application Support/2FAutoKeyStore/key-wrap.bin'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-macos-development
+          path: |
+            build/macos-server/*.pkg
+            desktop/src-tauri/target/release/bundle/dmg/*.dmg
+          retention-days: 7

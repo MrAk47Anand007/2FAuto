@@ -1,0 +1,4 @@
+#!/bin/sh
+set -e
+systemctl daemon-reload || true
+# Keep /var/lib/2fauto and the service account for a future reinstall.

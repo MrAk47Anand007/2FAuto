@@ -96,11 +96,14 @@ function backendBridge() {
   };
 }
 
+const packagedUi = process.env["TWOFAUTO_PACKAGED_UI"] === "1";
+
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
+    ...(packagedUi ? { spa: { enabled: true } } : {}),
   },
   vite: {
     plugins: [backendBridge()],

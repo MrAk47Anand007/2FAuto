@@ -3,10 +3,25 @@ import sys
 import base64
 import binascii
 import json
+import platform
+from pathlib import Path
 import pyotp
 from dotenv import load_dotenv
 
-load_dotenv()
+if os.getenv("APP_ENV", "").lower() != "packaged":
+    load_dotenv()
+
+
+def default_packaged_data_dir(role: str) -> Path:
+    system = platform.system()
+    if system == "Windows":
+        base = os.environ.get("PROGRAMDATA" if role == "server" else "LOCALAPPDATA")
+        if not base:
+            raise ValueError("Application data directory is unavailable")
+        return Path(base) / "2FAuto"
+    if system == "Darwin":
+        return Path.home() / "Library" / "Application Support" / "2FAuto"
+    return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "2fauto"
 
 
 class Settings:
@@ -28,6 +43,8 @@ class Settings:
     SESSION_SECRET: str
     ADMIN_USERNAME: str
     ADMIN_PASSWORD: str
+    PACKAGED_DATA_DIR: str
+    PACKAGED_ROLE: str
 
     def __init__(self) -> None:
         self.APP_ENV = os.getenv("APP_ENV", "development").lower()
@@ -52,7 +69,15 @@ class Settings:
         self.CLIENT_RATE_LIMIT_PER_MINUTE = int(
             os.getenv("CLIENT_RATE_LIMIT_PER_MINUTE", "60")
         )
-        self.DATABASE_PATH = os.getenv("DATABASE_PATH", "otp_service.db")
+        self.PACKAGED_ROLE = os.getenv("TWOFAUTO_ROLE", "desktop-web")
+        self.PACKAGED_DATA_DIR = os.getenv("TWOFAUTO_PACKAGED_DATA_DIR", "")
+        if self.APP_ENV == "packaged" and not self.PACKAGED_DATA_DIR:
+            self.PACKAGED_DATA_DIR = str(default_packaged_data_dir(self.PACKAGED_ROLE))
+        default_database = (
+            str(Path(self.PACKAGED_DATA_DIR) / "otp_service.db")
+            if self.APP_ENV == "packaged" else "otp_service.db"
+        )
+        self.DATABASE_PATH = os.getenv("DATABASE_PATH", default_database)
         self.SESSION_SECRET = os.getenv("SESSION_SECRET", "")
         self.ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
         self.ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
@@ -61,15 +86,15 @@ class Settings:
 
     def _validate(self) -> None:
         missing = []
-        if self.APP_ENV not in {"development", "test", "production"}:
-            missing.append("APP_ENV must be development, test, or production")
+        if self.APP_ENV not in {"development", "test", "production", "packaged"}:
+            missing.append("APP_ENV must be development, test, production, or packaged")
         if self.LEGACY_API_ENABLED and not self.API_KEY:
             missing.append("API_KEY")
-        if not self.SESSION_SECRET:
+        if not self.SESSION_SECRET and self.APP_ENV != "packaged":
             missing.append("SESSION_SECRET")
-        if not self.ADMIN_PASSWORD:
+        if not self.ADMIN_PASSWORD and self.APP_ENV != "packaged":
             missing.append("ADMIN_PASSWORD")
-        if not self.SECRET_ENCRYPTION_KEY:
+        if not self.SECRET_ENCRYPTION_KEY and self.APP_ENV != "packaged":
             missing.append("SECRET_ENCRYPTION_KEY")
 
         if self.SECRET_ENCRYPTION_KEY:
