@@ -40,6 +40,7 @@ def client(monkeypatch):
     config.settings.ADMIN_USERNAME = "admin"
     config.settings.ADMIN_PASSWORD = "admin-pass"
     config.settings.LEGACY_API_ENABLED = True
+    config.settings.LEGACY_API_RATE_LIMIT_PER_MINUTE = 120
     config.settings.APP_ENV = "test"
     config.settings.COOKIE_SECURE = False
     config.settings.ENABLE_DOCS = False

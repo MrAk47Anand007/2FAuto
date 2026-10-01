@@ -83,6 +83,14 @@ def init_database() -> None:
                 FOREIGN KEY(client_id) REFERENCES automation_clients(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS scoped_rate_limits (
+                scope TEXT NOT NULL,
+                scope_key TEXT NOT NULL,
+                window_started_at INTEGER NOT NULL,
+                request_count INTEGER NOT NULL,
+                PRIMARY KEY (scope, scope_key)
+            );
+
             CREATE TABLE IF NOT EXISTS portal_grants (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 portal_id INTEGER NOT NULL,
@@ -945,6 +953,42 @@ def touch_api_credential(credential_id: int, now: int) -> None:
             "UPDATE api_credentials SET last_used_at = ? WHERE id = ?",
             (now, credential_id),
         )
+
+
+def consume_scoped_rate_limit(scope: str, scope_key: str, now: int, limit: int) -> bool:
+    with get_db() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute(
+            """
+            SELECT window_started_at, request_count
+            FROM scoped_rate_limits
+            WHERE scope = ? AND scope_key = ?
+            """,
+            (scope, scope_key),
+        ).fetchone()
+        if row is None or now - int(row["window_started_at"]) >= 60:
+            db.execute(
+                """
+                INSERT INTO scoped_rate_limits (scope, scope_key, window_started_at, request_count)
+                VALUES (?, ?, ?, 1)
+                ON CONFLICT(scope, scope_key) DO UPDATE SET
+                    window_started_at = excluded.window_started_at,
+                    request_count = excluded.request_count
+                """,
+                (scope, scope_key, now),
+            )
+            return True
+        if int(row["request_count"]) >= limit:
+            return False
+        db.execute(
+            """
+            UPDATE scoped_rate_limits
+            SET request_count = request_count + 1
+            WHERE scope = ? AND scope_key = ?
+            """,
+            (scope, scope_key),
+        )
+        return True
 
 
 def consume_client_rate_limit(client_id: int, now: int, limit: int) -> bool:
