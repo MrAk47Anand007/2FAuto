@@ -23,7 +23,9 @@ class Settings:
     SESSION_IDLE_TIMEOUT_SECONDS: int
     SESSION_ABSOLUTE_TIMEOUT_SECONDS: int
     LEGACY_API_ENABLED: bool
+    LEGACY_API_RATE_LIMIT_PER_MINUTE: int
     CLIENT_RATE_LIMIT_PER_MINUTE: int
+    CONTENT_SECURITY_POLICY_REPORT_ONLY: bool
     DATABASE_PATH: str
     SESSION_SECRET: str
     ADMIN_USERNAME: str
@@ -49,8 +51,14 @@ class Settings:
             os.getenv("SESSION_ABSOLUTE_TIMEOUT_SECONDS", "28800")
         )
         self.LEGACY_API_ENABLED = os.getenv("LEGACY_API_ENABLED", "false").lower() == "true"
+        self.LEGACY_API_RATE_LIMIT_PER_MINUTE = int(
+            os.getenv("LEGACY_API_RATE_LIMIT_PER_MINUTE", "120")
+        )
         self.CLIENT_RATE_LIMIT_PER_MINUTE = int(
             os.getenv("CLIENT_RATE_LIMIT_PER_MINUTE", "60")
+        )
+        self.CONTENT_SECURITY_POLICY_REPORT_ONLY = (
+            os.getenv("CONTENT_SECURITY_POLICY_REPORT_ONLY", "false").lower() == "true"
         )
         self.DATABASE_PATH = os.getenv("DATABASE_PATH", "otp_service.db")
         self.SESSION_SECRET = os.getenv("SESSION_SECRET", "")
@@ -105,6 +113,8 @@ class Settings:
             missing.append("SESSION_IDLE_TIMEOUT_SECONDS must be below absolute timeout")
         if self.CLIENT_RATE_LIMIT_PER_MINUTE <= 0:
             missing.append("CLIENT_RATE_LIMIT_PER_MINUTE must be positive")
+        if self.LEGACY_API_ENABLED and self.LEGACY_API_RATE_LIMIT_PER_MINUTE <= 0:
+            missing.append("LEGACY_API_RATE_LIMIT_PER_MINUTE must be positive when legacy API is enabled")
 
         if self.APP_ENV == "production":
             sample_values = {

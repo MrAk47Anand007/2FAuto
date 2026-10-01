@@ -37,3 +37,18 @@ jobs:
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
+
+  frontend-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Secure Access Hub
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+      - name: Frontend dependency audit
+        run: bun audit --audit-level=high

@@ -1,16 +1,20 @@
-import hmac
 import hashlib
+import hmac
 import time
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request
 
 from app.core.config import settings
-from app.core.database import consume_client_rate_limit
+from app.core.database import consume_client_rate_limit, consume_scoped_rate_limit
 from app.services.clients import authenticate_client_token
 
 # Maximum age (seconds) of a signed request before it is rejected
 SIGNATURE_MAX_AGE_SECONDS = 30
+
+
+def _legacy_api_rate_key(api_key: str) -> str:
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 
 def require_api_key(x_api_key: Annotated[str | None, Header()] = None) -> str:
@@ -21,6 +25,18 @@ def require_api_key(x_api_key: Annotated[str | None, Header()] = None) -> str:
         raise HTTPException(status_code=401, detail="X-API-Key header is required")
     if not hmac.compare_digest(x_api_key, settings.API_KEY):
         raise HTTPException(status_code=403, detail="Invalid API key")
+    now = int(time.time())
+    if not consume_scoped_rate_limit(
+        "legacy_api",
+        _legacy_api_rate_key(x_api_key),
+        now,
+        settings.LEGACY_API_RATE_LIMIT_PER_MINUTE,
+    ):
+        raise HTTPException(
+            status_code=429,
+            detail="Legacy API rate limit exceeded",
+            headers={"Retry-After": "60"},
+        )
     return x_api_key
 
 

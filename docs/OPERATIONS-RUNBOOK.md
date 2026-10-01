@@ -8,6 +8,10 @@ command line, log, ticket, or repository.
 
 Set `APP_ENV=production`, `COOKIE_SECURE=true`, `LEGACY_API_ENABLED=false`, and
 provide a 32-byte `SECRET_ENCRYPTION_KEY` through the approved secret provider.
+When the API container sits behind an internal reverse proxy, set
+`UVICORN_FORWARDED_ALLOW_IPS` to that proxy's address (the Docker image defaults
+to `127.0.0.1`). Do not use a wildcard; untrusted clients must not be able to
+forge forwarded headers used for throttling or HTTPS detection.
 The current implementation reads that key from the process environment for
 local development; production KMS/workload-identity integration is still a
 release gate.

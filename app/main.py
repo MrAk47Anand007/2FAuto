@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import create_user, get_user_by_username, init_database
+from app.core.http_security import apply_security_headers
 from app.core.security import hash_password
 from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
@@ -84,16 +85,10 @@ def create_app() -> FastAPI:
             response.status_code,
             elapsed_ms,
         )
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        # Chromium's form POSTs use Origin: null under no-referrer, which
-        # conflicts with strict CSRF origin validation. Keep origin information
-        # for our own forms without sending referrers to other sites.
-        response.headers.setdefault("Referrer-Policy", "same-origin")
-        response.headers.setdefault(
-            "Permissions-Policy",
-            "camera=(), microphone=(), geolocation=(), payment=()",
-        )
+        security_headers: dict[str, str] = {}
+        apply_security_headers(security_headers)
+        for name, value in security_headers.items():
+            response.headers.setdefault(name, value)
         if settings.APP_ENV == "production" and settings.COOKIE_SECURE:
             response.headers.setdefault(
                 "Strict-Transport-Security",
